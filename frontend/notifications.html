@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="assets/favicon.png?v=2">
+<title>Notifications - Civic Events</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/layout.js"></script>
+<script src="js/notifications.js"></script>
+<script>requireAuth();</script>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header id="site-header" class="h-16"></header>
+<main id="main-content" class="mx-auto w-full max-w-6xl px-4 py-8 sm:py-10 space-y-5">
+  <section id="detail" aria-live="polite"></section>
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-3xl font-extrabold tracking-tight">Notifications</h1>
+    <button type="button" id="all-read" class="btn-secondary">Mark all read</button>
+  </div>
+  <div class="flex flex-wrap items-center gap-3">
+    <div role="group" aria-label="Show" class="inline-flex rounded border border-gray-300 overflow-hidden text-sm">
+      <button type="button" data-view="all" class="px-3 py-1.5" aria-pressed="true">All</button>
+      <button type="button" data-view="unread" class="px-3 py-1.5" aria-pressed="false">Unread</button>
+    </div>
+    <label class="text-sm text-slate-700">Type
+      <select id="type" class="ml-1 rounded border border-gray-300 px-2 py-1.5 text-sm"><option value="">All types</option></select>
+    </label>
+  </div>
+  <div id="list"></div>
+</main>
+<footer id="site-footer"></footer>
+<script>
+$(function () {
+  var N = Notifications, E = UI.escapeHtml, view = "all", type = "";
+  var openId = new URLSearchParams(location.search).get("id");
+
+  function syncToggle() {
+    $("[data-view]").each(function () {
+      var on = $(this).data("view") === view;
+      $(this).attr("aria-pressed", on).toggleClass("bg-brand-600 text-white", on).toggleClass("bg-white text-slate-700", !on);
+    });
+  }
+
+  function render() {
+    syncToggle();
+    var all = N.items(), types = {};
+    all.forEach(function (n) { if (n.type) types[n.type] = 1; });
+    var $t = $("#type"); // rebuild options, keeping selection
+    $t.html('<option value="">All types</option>' + Object.keys(types).map(function (t) { return '<option value="' + E(t) + '">' + E(t) + "</option>"; }).join("")).val(type);
+
+    var rows = all.filter(function (n) { return (!type || n.type === type) && (view === "all" || !N.isRead(n.id)); });
+    var $l = $("#list").empty();
+    if (!rows.length) return $l.html(UI.emptyState(view === "unread" ? "No unread notifications" : "No notifications", "You're all caught up."));
+    var $u = $('<ul class="space-y-2"></ul>').appendTo($l);
+    rows.forEach(function (n) {
+      var unread = !N.isRead(n.id);
+      $u.append($("<li></li>").append(
+        $('<button type="button" class="w-full text-left flex gap-3 p-4 rounded-md border border-gray-200 hover:bg-mint focus:outline-none focus-visible:ring-2 focus-visible:ring-teal"></button>')
+          .toggleClass("bg-brand-50", unread).toggleClass("bg-white", !unread).data("id", n.id)
+          .append('<span aria-hidden="true" class="text-xl">' + N.icon(n.type) + "</span>",
+            $('<span class="min-w-0 flex-1"></span>').append(
+              $('<span class="block font-medium"></span>').text(n.title).append(unread ? ' <span class="text-xs rounded bg-brand-600 text-white px-1.5 py-0.5 ml-1">Unread</span>' : ""),
+              $('<span class="block text-sm text-slate-600 truncate"></span>').text(n.message),
+              $('<span class="block text-xs text-slate-500 mt-0.5"></span>').text(N.relTime(n.created_at))))));
+    });
+  }
+
+  function showDetail(id) {
+    var n = N.items().filter(function (x) { return String(x.id) === String(id); })[0];
+    if (!n) return $("#detail").html(UI.emptyState("Notification not found", "It may have been removed."));
+    N.markRead(n.id); // optimistic, client-side only
+    var link = N.linkFor(n);
+    var $d = $('<article class="rounded-md bg-white border border-gray-200 p-5 space-y-3" tabindex="-1"></article>').append(
+      $('<p class="text-xs uppercase tracking-wide text-slate-500"></p>').text(N.icon(n.type) + " " + (n.type || "notification") + " · " + new Date(n.created_at).toLocaleString()),
+      $('<h2 class="text-xl font-semibold"></h2>').text(n.title),
+      $('<p class="whitespace-pre-line text-slate-700"></p>').text(n.message));
+    var $row = $('<div class="flex flex-wrap gap-2 pt-2"></div>').appendTo($d);
+    if (link) $row.append($('<a class="btn-primary"></a>').attr("href", link.href).text(link.label));
+    // ROLE GUARD: UI only: delete shown to admins only; DELETE /notifications/:id is admin-only on the server too.
+    if (isAdmin()) {
+      $row.append($('<button type="button" class="btn-secondary text-red-700">Delete</button>').on("click", function () {
+        UI.confirm({ title: "Delete notification?", message: "This removes it for everyone who can see it.", confirmText: "Delete", danger: true }).then(function (ok) {
+          if (!ok) return;
+          Api.del("/notifications/" + encodeURIComponent(n.id)).done(function () {
+            UI.toast("Notification deleted.", "success"); history.replaceState(null, "", "notifications.html");
+            $("#detail").empty(); N.load();
+          }).fail(function (e) { UI.toast(e.message, "error"); });
+        });
+      }));
+    }
+    $row.append($('<button type="button" class="btn-secondary">Close</button>').on("click", function () { history.replaceState(null, "", "notifications.html"); $("#detail").empty(); }));
+    $("#detail").empty().append($d); $d.trigger("focus");
+  }
+
+  $("#list").on("click", "button", function () {
+    var id = $(this).data("id"); history.replaceState(null, "", "notifications.html?id=" + encodeURIComponent(id)); showDetail(id);
+  });
+  $("[data-view]").on("click", function () { view = $(this).data("view"); render(); });
+  $("#type").on("change", function () { type = this.value; render(); });
+  $("#all-read").on("click", function () { N.markAllRead(); UI.toast("All marked as read.", "success"); });
+
+  N.on(render); // re-render when read-state / polling changes
+  $("#list").html(UI.skeleton(3));
+  N.load().done(function () { render(); if (openId) showDetail(openId); })
+    .fail(function (err) { UI.errorState($("#list"), err.message, function () { location.reload(); }); });
+});
+</script>
+</body>
+</html>
