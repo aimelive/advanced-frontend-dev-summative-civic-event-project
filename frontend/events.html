@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="assets/favicon.png?v=2">
+<title>Events - Civic Events</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/layout.js"></script>
+<script src="js/event-utils.js"></script>
+<script>requireAuth();</script>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header id="site-header" class="h-16"></header>
+<main id="main-content" class="mx-auto w-full max-w-6xl px-4 py-8 sm:py-10 space-y-5">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-3xl font-extrabold tracking-tight">Events</h1>
+    <!-- ROLE GUARD: UI only: shown to admins; server enforces too -->
+    <a id="new-btn" href="event-form.html" class="btn-primary hidden">New event</a>
+  </div>
+
+  <form id="filters" role="search" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 rounded-md bg-white border border-gray-200 p-4">
+    <div class="lg:col-span-2">
+      <label for="f-q" class="block text-sm font-medium mb-1">Search</label>
+      <input id="f-q" type="search" placeholder="Title or location" class="w-full rounded border border-gray-300 px-3 py-2 text-sm">
+    </div>
+    <div>
+      <label for="f-date" class="block text-sm font-medium mb-1">On or after</label>
+      <input id="f-date" type="date" class="w-full rounded border border-gray-300 px-3 py-2 text-sm">
+    </div>
+    <div>
+      <label for="f-loc" class="block text-sm font-medium mb-1">Location</label>
+      <select id="f-loc" class="w-full rounded border border-gray-300 px-3 py-2 text-sm"><option value="">All locations</option></select>
+    </div>
+  </form>
+
+  <p id="count" class="text-sm text-slate-600" aria-live="polite"></p>
+  <div id="list"></div>
+  <nav id="pager" aria-label="Pagination" class="flex items-center justify-center gap-3"></nav>
+</main>
+<footer id="site-footer"></footer>
+<script>
+$(function () {
+  var PER = 9, all = [], regs = {}, page = 1;
+  var E = UI.escapeHtml;
+  if (isAdmin()) $("#new-btn").removeClass("hidden");
+
+  // Prefill search from ?q=
+  $("#f-q").val(new URLSearchParams(location.search).get("q") || "");
+
+  function fillLocations() {
+    var locs = {}; all.forEach(function (e) { if (e.location) locs[e.location] = 1; });
+    var $s = $("#f-loc"), cur = $s.val();
+    $s.find("option:gt(0)").remove();
+    Object.keys(locs).sort().forEach(function (l) { $s.append($("<option>").val(l).text(l)); });
+    $s.val(cur);
+  }
+
+  function filtered() {
+    var q = $("#f-q").val().trim().toLowerCase(), d = $("#f-date").val(), loc = $("#f-loc").val();
+    return all.filter(function (e) {
+      if (q && (e.title + " " + (e.location || "")).toLowerCase().indexOf(q) < 0) return false;
+      if (loc && e.location !== loc) return false;
+      // Compare on local calendar day so "on or after" includes events later today.
+      if (d && new Date(e.ends_at || e.starts_at) < new Date(d + "T00:00")) return false;
+      return true;
+    });
+  }
+
+  function card(e) {
+    var img = EventUtils.imageUrl(e);
+    var $c = $('<article class="flex flex-col rounded-md bg-white border border-gray-200 overflow-hidden"></article>');
+    $c.append(img
+      ? $('<img loading="lazy" class="h-40 w-full object-cover bg-slate-100">').attr({ src: img, alt: "" })
+      : '<div class="h-40 w-full bg-brand-100" aria-hidden="true"></div>');
+    var $b = $('<div class="flex flex-col flex-1 p-4"></div>').appendTo($c);
+    $b.append($('<h2 class="font-semibold text-lg"></h2>').text(e.title));
+    if (e.published === false) $b.find("h2").append(' <span class="text-xs font-medium rounded bg-[#FDF1DC] text-gold-700 px-2 py-0.5">Draft</span>');
+    $b.append($('<p class="text-sm text-slate-600 mt-1"></p>').text(EventUtils.range(e)));
+    $b.append($('<p class="text-sm text-slate-600"></p>').text(e.location || ""));
+    $b.append($('<p class="text-sm text-slate-500 mt-2 line-clamp-3"></p>').text(e.description || ""));
+    var $a = $('<div class="mt-auto pt-4 flex flex-wrap gap-2"></div>').appendTo($b);
+    $a.append($('<a class="btn-secondary"></a>').attr("href", "event.html?id=" + encodeURIComponent(e.id)).text("View").attr("aria-label", "View " + e.title));
+    if (!isAdmin()) {
+      var $r = $('<button type="button" class="btn-primary"></button>').text(regs[String(e.id)] ? "Registered" : "Register")
+        .prop("disabled", !!regs[String(e.id)]).attr("aria-label", "Register for " + e.title);
+      $r.on("click", function () {
+        UI.loading($r, true, "Registering...");
+        Api.post("/event-registrations/register", { event_id: e.id }).done(function () {
+          regs[String(e.id)] = true; UI.toast("You're registered!", "success");
+          UI.loading($r, false); $r.text("Registered").prop("disabled", true);
+        }).fail(function (err) { UI.loading($r, false); UI.toast(err.message, "error"); });
+      });
+      $a.append($r);
+    } else {
+      // ROLE GUARD: UI only: Edit/Delete for admins; server enforces too.
+      $a.append($('<a class="btn-secondary"></a>').attr("href", "event-form.html?id=" + encodeURIComponent(e.id)).text("Edit").attr("aria-label", "Edit " + e.title));
+      var $d = $('<button type="button" class="btn-secondary text-red-700"></button>').text("Delete").attr("aria-label", "Delete " + e.title);
+      $d.on("click", function () {
+        UI.confirm({ title: "Delete event?", message: '"' + e.title + '" will be permanently removed.', confirmText: "Delete", danger: true }).then(function (ok) {
+          if (!ok) return;
+          Api.del("/events/" + e.id).done(function () {
+            all = all.filter(function (x) { return x.id !== e.id; });
+            UI.toast("Event deleted.", "success"); render();
+          }).fail(function (err) { UI.toast(err.message, "error"); });
+        });
+      });
+      $a.append($d);
+    }
+    return $c;
+  }
+
+  function render() {
+    var list = filtered(), pages = Math.max(1, Math.ceil(list.length / PER));
+    if (page > pages) page = pages;
+    $("#count").text(list.length + (list.length === 1 ? " event" : " events"));
+    var $l = $("#list").empty();
+    if (!list.length) {
+      $l.html(UI.emptyState(all.length ? "No events match your filters" : "No events yet", all.length ? "Try clearing the search or filters." : "Check back soon."));
+      $("#pager").empty(); return;
+    }
+    var $g = $('<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>').appendTo($l);
+    list.slice((page - 1) * PER, page * PER).forEach(function (e) { $g.append(card(e)); });
+    var $p = $("#pager").empty();
+    if (pages > 1) {
+      $p.append($('<button type="button" class="btn-secondary">Previous</button>').prop("disabled", page === 1).on("click", function () { go(page - 1); }));
+      $p.append($('<span class="text-sm" aria-current="page"></span>').text("Page " + page + " of " + pages));
+      $p.append($('<button type="button" class="btn-secondary">Next</button>').prop("disabled", page === pages).on("click", function () { go(page + 1); }));
+    }
+  }
+  function go(n) { page = n; render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+
+  $("#filters").on("submit", function (e) { e.preventDefault(); });
+  $("#f-q").on("input", function () { page = 1; render(); });
+  $("#f-date,#f-loc").on("change", function () { page = 1; render(); });
+
+  // Load events; show error state (with retry) if the list itself fails.
+  function init() {
+    $("#list").html(UI.skeleton(6)); $("#pager").empty();
+    Api.get("/events").done(function (res) {
+      all = (res.data || []).filter(EventUtils.visible).sort(function (a, b) { return new Date(a.starts_at) - new Date(b.starts_at); });
+      fillLocations();
+      if (isAdmin()) return render();
+      // Registration state is a nice-to-have: ignore its failure.
+      Api.get("/event-registrations/my-registrations", null, { silent: true }).done(function (r) {
+        (r.data || []).forEach(function (x) { regs[EventUtils.regEventId(x)] = true; });
+      }).always(render);
+    }).fail(function (err) { UI.errorState($("#list"), err.message, init); });
+  }
+  init();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="assets/favicon.png?v=2">
+<title>Event form - Civic Events</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/layout.js"></script>
+<script src="js/event-utils.js"></script>
+<!-- ROLE GUARD: admin only (server enforces too) -->
+<script>requireAdmin();</script>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header id="site-header" class="h-16"></header>
+<main id="main-content" class="mx-auto w-full max-w-6xl px-4 py-8 sm:py-10">
+  <a href="events.html" class="text-sm text-brand-700 underline">&larr; All events</a>
+  <h1 id="page-h" class="text-3xl font-extrabold tracking-tight my-3">New event</h1>
+  <div id="state"></div>
+  <form id="form" novalidate class="space-y-4 rounded-md bg-white border border-gray-200 p-5">
+    <div>
+      <label for="title" class="block text-sm font-medium mb-1">Title *</label>
+      <input id="title" name="title" required maxlength="150" class="w-full rounded border border-gray-300 px-3 py-2 text-sm">
+      <p class="text-sm text-red-700" data-err="title"></p>
+    </div>
+    <div>
+      <label for="description" class="block text-sm font-medium mb-1">Description</label>
+      <textarea id="description" name="description" rows="4" class="w-full rounded border border-gray-300 px-3 py-2 text-sm"></textarea>
+    </div>
+    <div>
+      <label for="location" class="block text-sm font-medium mb-1">Location *</label>
+      <input id="location" name="location" required class="w-full rounded border border-gray-300 px-3 py-2 text-sm">
+      <p class="text-sm text-red-700" data-err="location"></p>
+    </div>
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div>
+        <label for="starts_at" class="block text-sm font-medium mb-1">Starts *</label>
+        <input id="starts_at" name="starts_at" type="datetime-local" required class="w-full rounded border border-gray-300 px-3 py-2 text-sm">
+        <p class="text-sm text-red-700" data-err="starts_at"></p>
+      </div>
+      <div>
+        <label for="ends_at" class="block text-sm font-medium mb-1">Ends *</label>
+        <input id="ends_at" name="ends_at" type="datetime-local" required class="w-full rounded border border-gray-300 px-3 py-2 text-sm">
+        <p class="text-sm text-red-700" data-err="ends_at"></p>
+      </div>
+    </div>
+    <div>
+      <label for="image" class="block text-sm font-medium mb-1">Image (JPG, PNG or WebP, max 2 MB)</label>
+      <input id="image" type="file" accept="image/jpeg,image/png,image/webp" class="block w-full text-sm">
+      <p class="text-sm text-red-700" data-err="image"></p>
+      <img id="preview" alt="Image preview" class="hidden mt-3 max-h-48 rounded border border-gray-200">
+    </div>
+    <div class="flex items-center gap-2">
+      <input id="published" type="checkbox" checked class="h-4 w-4">
+      <label for="published" class="text-sm font-medium">Published</label>
+    </div>
+    <p role="alert" class="text-sm text-red-700" data-err="form"></p>
+    <div class="flex gap-2">
+      <button type="submit" id="save" class="btn-primary">Save event</button>
+      <a href="events.html" class="btn-secondary">Cancel</a>
+    </div>
+  </form>
+</main>
+<footer id="site-footer"></footer>
+<script>
+$(function () {
+  var id = new URLSearchParams(location.search).get("id");
+  var MAX = 2 * 1024 * 1024, TYPES = ["image/jpeg", "image/png", "image/webp"];
+  var $f = $("#form"), file = null;
+  var setErr = function (k, m) { $f.find('[data-err="' + k + '"]').text(m || ""); };
+
+  // Edit mode: prefill from the existing event.
+  function loadEvent() {
+    $("#page-h").text("Edit event"); $f.addClass("hidden"); $("#state").html(UI.skeleton(1));
+    Api.get("/events/" + encodeURIComponent(id)).done(function (res) {
+      var e = res.data;
+      $("#state").empty(); $f.removeClass("hidden");
+      $("#title").val(e.title); $("#description").val(e.description); $("#location").val(e.location);
+      $("#starts_at").val(EventUtils.toLocalInput(e.starts_at)); $("#ends_at").val(EventUtils.toLocalInput(e.ends_at));
+      $("#published").prop("checked", e.published !== false);
+      var img = EventUtils.imageUrl(e);
+      if (img) $("#preview").attr("src", img).removeClass("hidden");
+    }).fail(function (err) { UI.errorState($("#state"), err.message, loadEvent); });
+  }
+  if (id) loadEvent();
+
+  // Validate type/size BEFORE upload, then preview.
+  $("#image").on("change", function () {
+    setErr("image"); file = this.files[0] || null;
+    if (!file) return;
+    if (TYPES.indexOf(file.type) < 0) { setErr("image", "Please choose a JPG, PNG or WebP image."); file = null; this.value = ""; return; }
+    if (file.size > MAX) { setErr("image", "Image is too large (max 2 MB)."); file = null; this.value = ""; return; }
+    $("#preview").attr("src", URL.createObjectURL(file)).removeClass("hidden");
+  });
+
+  $f.on("submit", function (e) {
+    e.preventDefault();
+    $f.find("[data-err]").text("");
+    var ok = true;
+    ["title", "location", "starts_at", "ends_at"].forEach(function (k) {
+      if (!$("#" + k).val().trim()) { setErr(k, "This field is required."); ok = false; }
+    });
+    var s = $("#starts_at").val(), en = $("#ends_at").val();
+    if (s && en && new Date(en) <= new Date(s)) { setErr("ends_at", "End must be after the start."); ok = false; }
+    if (!ok) return $f.find("[data-err]:not(:empty)").first().prev().trigger("focus");
+
+    var fd = new FormData();
+    fd.append("title", $("#title").val().trim());
+    fd.append("description", $("#description").val().trim());
+    fd.append("location", $("#location").val().trim());
+    fd.append("starts_at", new Date(s).toISOString());
+    fd.append("ends_at", new Date(en).toISOString());
+    fd.append("published", $("#published").is(":checked")); // backend currently ignores it, but send anyway
+    if (file) fd.append("image", file);
+
+    var $b = $("#save"); UI.loading($b, true, "Saving...");
+    (id ? Api.put("/events/" + encodeURIComponent(id), fd) : Api.post("/events", fd)).done(function (res) {
+      UI.toast("Event saved.", "success");
+      var newId = id || (res.data && (res.data.id || (res.data.event && res.data.event.id)));
+      setTimeout(function () { location.href = newId ? "event.html?id=" + encodeURIComponent(newId) : "events.html"; }, 700);
+    }).fail(function (err) {
+      UI.loading($b, false);
+      (err.errors || []).forEach(function (x) { setErr(x.field, x.message); });
+      setErr("form", err.errors.length ? "Please fix the highlighted fields." : err.message);
+    });
+  });
+});
+</script>
+</body>
+</html>

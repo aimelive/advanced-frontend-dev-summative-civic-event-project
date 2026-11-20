@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="assets/favicon.png?v=2">
+<title>Event - Civic Events</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/layout.js"></script>
+<script src="js/event-utils.js"></script>
+<script>requireAuth();</script>
+<style>
+  /* Accessible star radios: visually hidden inputs, labels are the stars; arrow keys work natively. */
+  .stars { display:inline-flex; flex-direction:row-reverse; gap:.125rem; }
+  .stars input { position:absolute; opacity:0; }
+  .stars label { font-size:2rem; line-height:1; color:#cbd5e1; cursor:pointer; }
+  .stars input:checked ~ label, .stars label:hover, .stars label:hover ~ label { color:#E8A33D; }
+  .stars input:focus-visible + label { outline:2px solid #1BA3A3; outline-offset:2px; border-radius:4px; }
+</style>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header id="site-header" class="h-16"></header>
+<main id="main-content" class="mx-auto w-full max-w-6xl px-4 py-8 sm:py-10 space-y-6">
+  <a href="events.html" class="text-sm text-brand-700 underline">&larr; All events</a>
+  <div id="detail"></div>
+  <section id="admin-box" class="hidden space-y-6"></section>
+  <section id="feedback-box" class="hidden rounded-md bg-white border border-gray-200 p-5" aria-labelledby="fb-h"></section>
+</main>
+<footer id="site-footer"></footer>
+<script>
+$(function () {
+  var id = new URLSearchParams(location.search).get("id");
+  var E = UI.escapeHtml, ev, registered = false;
+  if (!id) return $("#detail").html(UI.emptyState("No event selected", "Go back to the events list and pick one."));
+
+  function load() {
+    $("#detail").html(UI.skeleton(1));
+    Api.get("/events/" + encodeURIComponent(id)).done(function (res) {
+      ev = res.data;
+      if (!ev || !EventUtils.visible(ev)) return $("#detail").html(UI.emptyState("Event not found", "It may have been removed or unpublished."));
+      document.title = ev.title + " - Civic Events";
+      render();
+      // ROLE GUARD: UI only: admin sections vs user sections; server enforces too.
+      if (isAdmin()) loadAdmin(); else { loadRegistration(); loadFeedback(); }
+    }).fail(function (err) { UI.errorState($("#detail"), err.message, load); });
+  }
+
+  function render() {
+    var img = EventUtils.imageUrl(ev);
+    var maps = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(ev.location || "");
+    var $d = $('<article class="rounded-md bg-white border border-gray-200 overflow-hidden"></article>');
+    if (img) $d.append($('<img class="w-full max-h-96 object-cover bg-slate-100">').attr({ src: img, alt: "" }));
+    var $b = $('<div class="p-5 space-y-3"></div>').appendTo($d);
+    var $t = $('<h1 class="text-3xl font-extrabold tracking-tight"></h1>').text(ev.title).appendTo($b);
+    // ROLE GUARD: Draft badge only appears for admins (non-admins never get unpublished events: EventUtils.visible).
+    if (isAdmin() && ev.published === false) $t.append('<span class="ml-2 align-middle text-xs font-medium rounded bg-[#FDF1DC] text-gold-700 px-2 py-0.5">Draft</span>');
+    $b.append($('<p class="text-sm"></p>').html("<strong>Starts:</strong> ").append(document.createTextNode(EventUtils.dateTime(ev.starts_at))));
+    if (ev.ends_at) $b.append($('<p class="text-sm"></p>').html("<strong>Ends:</strong> ").append(document.createTextNode(EventUtils.dateTime(ev.ends_at))));
+    $b.append($('<p class="text-sm"></p>').html("<strong>Where:</strong> ").append(document.createTextNode((ev.location || "TBA") + " "))
+      .append(ev.location ? $('<a class="text-brand-700 underline" target="_blank" rel="noopener noreferrer">View on Google Maps<span class="sr-only"> (opens in a new tab)</span></a>').attr("href", maps) : ""));
+    $b.append($('<p class="text-slate-700 whitespace-pre-line"></p>').text(ev.description || ""));
+    var $a = $('<div class="pt-2 flex flex-wrap gap-2"></div>').appendTo($b);
+    if (isAdmin()) $a.append($('<a class="btn-secondary">Edit</a>').attr("href", "event-form.html?id=" + encodeURIComponent(ev.id)));
+    else $a.append('<button type="button" id="reg-btn" class="btn-primary" disabled>Loading...</button>');
+    $("#detail").empty().append($d);
+    $("#reg-btn").on("click", toggleReg);
+  }
+
+  // ---- Registration (users) ----
+  function setReg(on) {
+    registered = on;
+    $("#reg-btn").prop("disabled", false).text(on ? "Cancel registration" : "Register")
+      .toggleClass("btn-primary", !on).toggleClass("btn-secondary", on);
+  }
+  function loadRegistration() {
+    Api.get("/event-registrations/my-registrations", null, { silent: true }).done(function (r) {
+      setReg((r.data || []).some(function (x) { return EventUtils.regEventId(x) === String(ev.id); }));
+    }).fail(function () { setReg(false); });
+  }
+  function toggleReg() {
+    var $b = $("#reg-btn");
+    UI.loading($b, true, registered ? "Cancelling..." : "Registering...");
+    Api.post("/event-registrations/" + (registered ? "cancel" : "register"), { event_id: ev.id }).done(function () {
+      UI.toast(registered ? "Registration cancelled." : "You're registered!", "success");
+      UI.loading($b, false); setReg(!registered);
+    }).fail(function (err) { UI.loading($b, false); setReg(registered); UI.toast(err.message, "error"); });
+  }
+
+  // ---- Feedback (users) ----
+  function loadFeedback() {
+    var $s = $("#feedback-box").removeClass("hidden");
+    Api.get("/event-feedback/my-feedback", null, { silent: true }).done(function (r) {
+      var mine = (r.data || []).filter(function (f) { return String(f.event_id != null ? f.event_id : f.event && f.event.id) === String(ev.id); })[0];
+      mine ? showMine(mine) : feedbackForm(null);
+    }).fail(function () { feedbackForm(null); });
+  }
+  function showMine(f) {
+    var $s = $("#feedback-box").empty();
+    $s.append('<h2 id="fb-h" class="text-lg font-semibold mb-2">Your feedback</h2>');
+    $s.append($('<p></p>').attr("aria-label", f.rating + " out of 5 stars").text("★".repeat(f.rating) + "☆".repeat(5 - f.rating)).addClass("text-gold-700 text-xl"));
+    $s.append($('<p class="mt-1 text-slate-700 whitespace-pre-line"></p>').text(f.comment || ""));
+    $s.append($('<button type="button" class="btn-secondary mt-3">Edit feedback</button>').on("click", function () { feedbackForm(f); }));
+  }
+  function feedbackForm(f) {
+    var $s = $("#feedback-box").empty();
+    var stars = "";
+    for (var i = 5; i >= 1; i--) // row-reverse CSS shows 1..5 left to right
+      stars += '<input type="radio" name="rating" id="r' + i + '" value="' + i + '"' + (f && f.rating === i ? " checked" : "") + (i === 1 ? " required" : "") +
+        '><label for="r' + i + '" title="' + i + ' star' + (i > 1 ? "s" : "") + '"><span aria-hidden="true">★</span><span class="sr-only">' + i + ' star' + (i > 1 ? "s" : "") + '</span></label>';
+    $s.html('<h2 id="fb-h" class="text-lg font-semibold mb-3">' + (f ? "Edit your feedback" : "Leave feedback") + '</h2>' +
+      '<form novalidate class="space-y-3"><fieldset class="relative"><legend class="text-sm font-medium mb-1">Rating</legend><div class="stars">' + stars + '</div></fieldset>' +
+      '<div><label for="fb-c" class="block text-sm font-medium mb-1">Comment</label><textarea id="fb-c" rows="3" class="w-full rounded border border-gray-300 px-3 py-2 text-sm"></textarea></div>' +
+      '<p role="alert" class="text-sm text-red-700" data-err></p>' +
+      '<div class="flex gap-2"><button class="btn-primary" type="submit">Submit</button>' + (f ? '<button type="button" class="btn-secondary" data-cancel>Cancel</button>' : "") + '</div></form>');
+    $s.find("textarea").val(f ? f.comment : "");
+    $s.find("[data-cancel]").on("click", function () { showMine(f); });
+    $s.find("form").on("submit", function (e) {
+      e.preventDefault();
+      var rating = +$s.find("input[name=rating]:checked").val();
+      if (!rating) return $s.find("[data-err]").text("Please choose a rating from 1 to 5.");
+      $s.find("[data-err]").text("");
+      var body = { event_id: ev.id, rating: rating, comment: $s.find("textarea").val().trim() }, $b = $s.find("[type=submit]");
+      UI.loading($b, true, "Saving...");
+      (f ? Api.put("/event-feedback/" + f.id, body) : Api.post("/event-feedback", body)).done(function () {
+        UI.toast("Thanks for your feedback!", "success"); loadFeedback();
+      }).fail(function (err) { UI.loading($b, false); $s.find("[data-err]").text(err.message); });
+    });
+  }
+
+  // ---- Admin: attendees + feedback ----
+  function loadAdmin() {
+    // ROLE GUARD: admins see attendees + all feedback, and a note instead of Register/Cancel and the feedback form.
+    var $a = $("#admin-box").removeClass("hidden").html(
+      '<p class="rounded-md border border-gray-200 bg-mint px-4 py-3 text-sm text-slate-700">Admins manage events. Registration and feedback are for attendees.</p>' +
+      '<div class="rounded-md bg-white border border-gray-200 p-5"><h2 class="text-lg font-semibold mb-3">Attendees</h2><div id="att"></div></div>' +
+      '<div class="rounded-md bg-white border border-gray-200 p-5"><h2 class="text-lg font-semibold mb-1">Feedback</h2><p id="avg" class="text-sm text-slate-600 mb-3"></p><div id="fbs"></div></div>');
+    $("#att").html(UI.skeleton(1)); $("#fbs").html(UI.skeleton(1));
+    (function att() {
+      Api.get("/event-registrations/event/" + ev.id + "/attendees").done(function (r) {
+        var l = r.data || [];
+        if (!l.length) return $("#att").html(UI.emptyState("No attendees yet"));
+        var $u = $('<ul class="divide-y divide-slate-200"></ul>');
+        l.forEach(function (a) {
+          var u = a.user || a; // shape not documented: accept flat or nested user
+          $u.append($('<li class="py-2 text-sm"></li>').append($("<span class='font-medium'></span>").text(u.full_name || u.name || "Unknown"))
+            .append(document.createTextNode(u.email ? " - " + u.email : "")));
+        });
+        $("#att").empty().append($u);
+      }).fail(function (err) { UI.errorState($("#att"), err.message, att); });
+    })();
+    (function fb() {
+      Api.get("/event-feedback/event/" + ev.id).done(function (r) {
+        var l = r.data || [];
+        if (!l.length) { $("#avg").text(""); return $("#fbs").html(UI.emptyState("No feedback yet")); }
+        var avg = l.reduce(function (s, f) { return s + (+f.rating || 0); }, 0) / l.length;
+        $("#avg").text("Average rating: " + avg.toFixed(1) + " / 5 (" + l.length + " review" + (l.length > 1 ? "s" : "") + ")");
+        var $u = $('<ul class="divide-y divide-slate-200"></ul>');
+        l.forEach(function (f) {
+          var u = f.user || {};
+          $u.append($('<li class="py-3 text-sm"></li>')
+            .append($('<p class="text-gold-700"></p>').attr("aria-label", f.rating + " out of 5").text("★".repeat(f.rating) + "☆".repeat(5 - f.rating)))
+            .append($('<p class="whitespace-pre-line"></p>').text(f.comment || ""))
+            .append($('<p class="text-xs text-slate-500"></p>').text(u.full_name || f.full_name || "")));
+        });
+        $("#fbs").empty().append($u);
+      }).fail(function (err) { UI.errorState($("#fbs"), err.message, fb); });
+    })();
+  }
+
+  load();
+});
+</script>
+</body>
+</html>
