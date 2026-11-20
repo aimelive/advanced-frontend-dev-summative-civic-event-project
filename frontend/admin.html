@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="assets/favicon.png?v=2">
+<title>Manage Users - Civic Events</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/layout.js"></script>
+<script src="js/admin-nav.js"></script>
+<!-- ROLE GUARD: admin only (non-admins -> dashboard.html). UX only; /users routes are admin-protected server-side. -->
+<script>requireAdmin();</script>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header id="site-header" class="h-16"></header>
+<main id="main-content" class="mx-auto w-full max-w-6xl px-4 py-8 sm:py-10">
+  <div id="admin-shell" class="flex flex-col md:flex-row gap-6">
+    <div class="flex-1 min-w-0 space-y-4">
+      <h1 class="text-3xl font-extrabold tracking-tight">Users</h1>
+      <div class="flex flex-col sm:flex-row gap-2">
+        <label class="sr-only" for="q">Search users</label>
+        <input id="q" type="search" placeholder="Search name or email..." class="flex-1 rounded border border-gray-300 px-3 py-2 text-sm">
+        <label class="sr-only" for="status">Filter by status</label>
+        <select id="status" class="rounded border border-gray-300 px-3 py-2 text-sm">
+          <option value="all">All statuses</option><option value="active">Active</option><option value="inactive">Inactive</option>
+        </select>
+      </div>
+      <div id="list" aria-live="polite"></div>
+      <nav id="pager" aria-label="Pagination" class="flex items-center justify-between text-sm"></nav>
+    </div>
+  </div>
+</main>
+<footer id="site-footer"></footer>
+<script>
+$(function () {
+  AdminNav.mount("admin.html");
+  // No role editing on purpose: the API only exposes enable/disable (PATCH /users/:id/enable|disable), and
+  // letting admins change roles from the client would risk privilege escalation / locking out the last admin.
+  var PER = 10, all = [], page = 1, me = Auth.getUser();
+
+  function badge(txt, cls) { return '<span class="inline-block rounded-full px-2 py-0.5 text-xs font-medium ' + cls + '">' + txt + "</span>"; }
+  var roleBadge = function (r) { return badge(UI.escapeHtml(r), r === "admin" ? "bg-mint text-teal-800" : "bg-slate-100 text-slate-700"); };
+  var statusBadge = function (a) { return badge(a ? "Active" : "Inactive", a ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"); };
+
+  function filtered() {
+    var q = $("#q").val().trim().toLowerCase(), s = $("#status").val();
+    return all.filter(function (u) {
+      return (s === "all" || (s === "active") === !!u.is_active) &&
+        (!q || (u.full_name || "").toLowerCase().indexOf(q) > -1 || (u.email || "").toLowerCase().indexOf(q) > -1);
+    });
+  }
+
+  function actions(u) {
+    var self = String(u.id) === String(me.id);
+    var toggle = '<button type="button" data-toggle="' + u.id + '" class="btn-secondary"' + (self ? ' disabled title="You cannot disable yourself"' : "") + ">" +
+      (u.is_active ? "Disable" : "Enable") + "</button>";
+    return '<button type="button" data-view="' + u.id + '" class="btn-secondary mr-1">View</button>' + toggle;
+  }
+
+  function render() {
+    var rows = filtered(), pages = Math.max(1, Math.ceil(rows.length / PER));
+    page = Math.min(page, pages);
+    if (!rows.length) { $("#list").html(UI.emptyState("No users found", "Try a different search or filter.")); $("#pager").empty(); return; }
+    var slice = rows.slice((page - 1) * PER, page * PER);
+    var tbody = slice.map(function (u) {
+      return '<tr class="border-t border-gray-200"><td class="p-3">' + UI.escapeHtml(u.full_name) + '</td><td class="p-3">' + UI.escapeHtml(u.email) +
+        '</td><td class="p-3">' + roleBadge(u.role) + '</td><td class="p-3">' + statusBadge(u.is_active) + '</td><td class="p-3 text-right whitespace-nowrap">' + actions(u) + "</td></tr>";
+    }).join("");
+    var cards = slice.map(function (u) {
+      return '<div class="rounded-md bg-white border border-gray-200 p-4"><p class="font-medium">' + UI.escapeHtml(u.full_name) + '</p><p class="text-sm text-slate-600 break-all">' +
+        UI.escapeHtml(u.email) + '</p><p class="mt-2 space-x-1">' + roleBadge(u.role) + statusBadge(u.is_active) + '</p><div class="mt-3">' + actions(u) + "</div></div>";
+    }).join("");
+    $("#list").html('<div class="hidden md:block overflow-x-auto rounded-md bg-white border border-gray-200"><table class="w-full text-sm text-left"><caption class="sr-only">Users</caption>' +
+      '<thead class="bg-mint"><tr><th scope="col" class="p-3">Name</th><th scope="col" class="p-3">Email</th><th scope="col" class="p-3">Role</th><th scope="col" class="p-3">Status</th><th scope="col" class="p-3"><span class="sr-only">Actions</span></th></tr></thead><tbody>' +
+      tbody + '</tbody></table></div><div class="md:hidden space-y-3">' + cards + "</div>");
+    $("#pager").html('<button type="button" class="btn-secondary" data-pg="-1"' + (page === 1 ? " disabled" : "") + '>Previous</button><span>Page ' + page + " of " + pages +
+      " (" + rows.length + ' users)</span><button type="button" class="btn-secondary" data-pg="1"' + (page === pages ? " disabled" : "") + ">Next</button>");
+  }
+
+  function load() {
+    $("#list").html(UI.skeleton(3));
+    // Backend returns a plain array and defaults to 20 per page, so ask for plenty and paginate client-side.
+    // ROLE GUARD: user list is admin-only (GET /users is admin-protected server-side).
+    Api.get("/users", { page: 1, limit: 1000 }).done(function (res) {
+      var d = res.data; all = Array.isArray(d) ? d : (d && (d.users || d.items)) || [];
+      render();
+    }).fail(function (err) { UI.errorState($("#list"), err.message, load); });
+  }
+
+  $("#q").on("input", function () { page = 1; render(); });
+  $("#status").on("change", function () { page = 1; render(); });
+  $("#pager").on("click", "[data-pg]", function () { page += Number($(this).data("pg")); render(); });
+
+  // Enable/disable: confirm, update optimistically, revert if the request fails.
+  $("#list").on("click", "[data-toggle]", function () {
+    var id = String($(this).data("toggle"));
+    var u = all.filter(function (x) { return String(x.id) === id; })[0];
+    if (!u || id === String(me.id)) return;
+    var enable = !u.is_active, $b = $(this);
+    UI.confirm({ title: (enable ? "Enable " : "Disable ") + u.full_name + "?", message: enable ? "They will be able to log in again." : "They will no longer be able to log in.",
+      confirmText: enable ? "Enable" : "Disable", danger: !enable }).then(function (ok) {
+      if (!ok) return;
+      // ROLE GUARD: enable/disable accounts is an admin-only action.
+      u.is_active = enable; render();
+      Api.patch("/users/" + id + (enable ? "/enable" : "/disable"), null)
+        .done(function () { UI.toast("User " + (enable ? "enabled" : "disabled") + ".", "success"); })
+        .fail(function (err) { u.is_active = !enable; render(); UI.toast(err.message || "Could not update user.", "error"); });
+    });
+  });
+
+  // Details modal (GET /users/:id)
+  $("#list").on("click", "[data-view]", function () {
+    var $opener = $(this);
+    var $m = $('<div class="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4"><div role="dialog" aria-modal="true" aria-labelledby="um-t" class="bg-white rounded-md shadow-xl max-w-md w-full p-6">' +
+      '<h2 id="um-t" class="text-lg font-semibold">User details</h2><div data-body class="mt-3 text-sm" aria-live="polite">Loading...</div>' +
+      '<div class="mt-6 text-right"><button type="button" class="btn-secondary" data-close>Close</button></div></div></div>').appendTo("body");
+    var close = function () { $(document).off("keydown.um"); $m.remove(); $opener.trigger("focus"); };
+    $m.on("click", "[data-close]", close).on("click", function (e) { if (e.target === $m[0]) close(); });
+    $(document).on("keydown.um", function (e) { if (e.key === "Escape") close(); if (e.key === "Tab") { e.preventDefault(); $m.find("button").trigger("focus"); } });
+    $m.find("[data-close]").trigger("focus");
+    Api.get("/users/" + $opener.data("view")).done(function (res) {
+      var u = res.data || {}, fmt = function (d) { return d ? new Date(d).toLocaleString() : "-"; };
+      var $dl = $('<dl class="grid grid-cols-3 gap-y-2"></dl>');
+      [["Name", u.full_name], ["Email", u.email], ["Role", u.role], ["Status", u.is_active ? "Active" : "Inactive"], ["Joined", fmt(u.created_at)], ["Updated", fmt(u.updated_at)]]
+        .forEach(function (r) { $dl.append($('<dt class="text-slate-500"></dt>').text(r[0])).append($('<dd class="col-span-2 break-all"></dd>').text(r[1] == null ? "-" : r[1])); });
+      $m.find("[data-body]").empty().append($dl);
+    }).fail(function (err) { $m.find("[data-body]").text(err.message); });
+  });
+
+  load();
+});
+</script>
+</body>
+</html>

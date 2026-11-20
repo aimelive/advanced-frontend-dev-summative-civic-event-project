@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="assets/favicon.png?v=2">
+<title>My registrations - Civic Events</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/layout.js"></script>
+<script src="js/event-utils.js"></script>
+<script>requireAuth();</script>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header id="site-header" class="h-16"></header>
+<main id="main-content" class="mx-auto w-full max-w-6xl px-4 py-8 sm:py-10 space-y-5">
+  <h1 id="page-h" class="text-3xl font-extrabold tracking-tight">My registrations</h1>
+  <div id="list"></div>
+</main>
+<footer id="site-footer"></footer>
+<script>
+$(function () {
+  var items = [];
+
+  function render() {
+    var $l = $("#list").empty();
+    if (!items.length) {
+      return $l.html(UI.emptyState("You haven't registered for any events", "Find something happening near you.")).find("div").append('<a href="events.html" class="btn-primary inline-block mt-4">Browse events</a>');
+    }
+    var $u = $('<ul class="grid gap-4 sm:grid-cols-2"></ul>').appendTo($l);
+    items.forEach(function (r) {
+      var $c = $('<li class="rounded-md bg-white border border-gray-200 p-4 space-y-2 flex flex-col"></li>');
+      $c.append(
+        $('<h2 class="font-semibold"></h2>').append($('<a class="underline"></a>').attr("href", "event.html?id=" + encodeURIComponent(r.event_id)).text(r.title)),
+        $('<p class="text-sm text-slate-600"></p>').text(EventUtils.range(r)),
+        $('<p class="text-sm text-slate-600"></p>').text(r.location || ""));
+      var $b = $('<button type="button" class="btn-secondary text-red-700 mt-auto self-start">Cancel registration</button>')
+        .attr("aria-label", "Cancel registration for " + r.title)
+        .on("click", function () {
+          UI.confirm({ title: "Cancel registration?", message: "You will give up your spot at " + r.title + ".", confirmText: "Cancel registration", danger: true }).then(function (ok) {
+            if (!ok) return;
+            UI.loading($b, true, "Cancelling...");
+            Api.post("/event-registrations/cancel", { event_id: r.event_id }).done(function () {
+              items = items.filter(function (x) { return x.event_id !== r.event_id; });
+              UI.toast("Registration cancelled.", "success"); render();
+            }).fail(function (e) { UI.loading($b, false); UI.toast(e.message, "error"); });
+          });
+        });
+      $u.append($c.append($b));
+    });
+  }
+
+
+  // ================= ROLE GUARD: admin view (UI only; GET .../attendees is admin-only on the server too) =================
+  function adminInit() {
+    document.title = "Registrations - Civic Events";
+    $("#page-h").text("Registrations");
+    var E = UI.escapeHtml, events = [], att = {}, open = {}; // att[id] = array | "error" | undefined (loading)
+    var $tools = $('<div class="card p-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 items-end"></div>').insertBefore("#list");
+    $tools.html(
+      '<div class="lg:col-span-2"><label for="a-q" class="block text-sm font-medium mb-1">Search attendees</label>' +
+      '<input id="a-q" type="search" placeholder="Name or email" class="w-full rounded border border-gray-300 px-3 py-2 text-sm"></div>' +
+      '<div><label for="a-event" class="block text-sm font-medium mb-1">Event</label>' +
+      '<select id="a-event" class="w-full rounded border border-gray-300 px-3 py-2 text-sm"><option value="">All events</option></select></div>' +
+      '<div><button type="button" id="a-export" class="btn-secondary w-full whitespace-nowrap">Export CSV</button></div>');
+    var $count = $('<p id="a-count" class="text-sm text-slate-600" aria-live="polite"></p>').insertBefore("#list");
+
+    function norm(a) {
+      var u = a.user || a; // shape not documented: accept flat or nested user
+      return { name: u.full_name || u.name || "Unknown", email: u.email || "",
+        date: a.registered_at || a.registration_date || a.created_at || u.registered_at || "" };
+    }
+    function shortDate(d) { var x = new Date(d); return isNaN(x) ? "" : x.toLocaleDateString(undefined, { dateStyle: "medium" }); }
+
+    // Rows for one event after applying the search box.
+    function rowsFor(id) {
+      var q = $("#a-q").val().trim().toLowerCase(), l = att[id];
+      if (!Array.isArray(l)) return l;
+      return l.map(norm).filter(function (r) { return !q || (r.name + " " + r.email).toLowerCase().indexOf(q) > -1; });
+    }
+
+    function card(ev) {
+      var id = String(ev.id), rows = rowsFor(id), q = $("#a-q").val().trim();
+      var total = Array.isArray(att[id]) ? att[id].length : null;
+      var $d = $('<details class="card overflow-hidden"></details>').prop("open", !!open[id] || (!!q && Array.isArray(rows) && rows.length > 0));
+      $d.on("toggle", function () { open[id] = this.open; });
+      var $s = $('<summary class="flex flex-wrap items-center gap-x-4 gap-y-1 p-4 cursor-pointer select-none"></summary>').appendTo($d);
+      $s.append($('<span class="font-bold text-navy"></span>').text(ev.title));
+      if (ev.published === false) $s.append('<span class="text-xs font-medium rounded bg-[#FDF1DC] text-gold-700 px-2 py-0.5">Draft</span>');
+      $s.append($('<span class="text-sm text-slate-600"></span>').text(EventUtils.range(ev)));
+      $s.append($('<span class="ml-auto rounded-full bg-mint border border-gray-200 px-2.5 py-0.5 text-xs font-bold text-navy whitespace-nowrap"></span>')
+        .text(total == null ? "..." : total + (total === 1 ? " attendee" : " attendees")));
+      var $b = $('<div class="border-t border-gray-200 p-4"></div>').appendTo($d);
+      if (rows === "error") {
+        $b.append('<p class="text-sm text-red-700" role="alert">Couldn\'t load attendees.</p>');
+        $b.append($('<button type="button" class="btn-secondary mt-2">Try again</button>').on("click", function () { loadAtt(ev); }));
+      } else if (rows === undefined) {
+        $b.html(UI.skeleton(1));
+      } else if (!total) {
+        $b.html(UI.emptyState("No attendees yet", "Nobody has registered for this event."));
+      } else if (!rows.length) {
+        $b.html(UI.emptyState("No matches", "No attendees match your search."));
+      } else {
+        var $t = $('<div class="overflow-x-auto"><table class="w-full text-sm text-left"><thead class="bg-mint"><tr>' +
+          '<th scope="col" class="p-2.5 font-semibold">Name</th><th scope="col" class="p-2.5 font-semibold">Email</th><th scope="col" class="p-2.5 font-semibold whitespace-nowrap">Registered</th>' +
+          '</tr></thead><tbody class="divide-y divide-gray-200"></tbody></table></div>');
+        rows.forEach(function (r) {
+          $t.find("tbody").append($("<tr></tr>").append(
+            $('<td class="p-2.5 font-medium"></td>').text(r.name),
+            $('<td class="p-2.5 break-all"></td>').text(r.email),
+            $('<td class="p-2.5 whitespace-nowrap text-slate-600"></td>').text(shortDate(r.date))));
+        });
+        $b.append($t);
+      }
+      return $d;
+    }
+
+    function visibleEvents() {
+      var sel = $("#a-event").val(), q = $("#a-q").val().trim();
+      return events.filter(function (e) {
+        if (sel && String(e.id) !== sel) return false;
+        if (q) { var r = rowsFor(String(e.id)); return Array.isArray(r) && r.length > 0; } // hide events with no matching attendee while searching
+        return true;
+      });
+    }
+
+    function render() {
+      var list = visibleEvents(), $l = $("#list").empty();
+      $count.text(list.length + (list.length === 1 ? " event" : " events"));
+      if (!events.length) return $l.html(UI.emptyState("No events yet", "Create an event to start collecting registrations."));
+      if (!list.length) return $l.html(UI.emptyState("No matches", "Try clearing the search or event filter."));
+      var $u = $('<div class="space-y-3"></div>').appendTo($l);
+      list.forEach(function (e) { $u.append(card(e)); });
+    }
+
+    function loadAtt(ev) {
+      delete att[String(ev.id)]; render();
+      return Api.get("/event-registrations/event/" + encodeURIComponent(ev.id) + "/attendees", null, { silent: true })
+        .done(function (r) { att[String(ev.id)] = r.data || []; })
+        .fail(function () { att[String(ev.id)] = "error"; })
+        .always(render);
+    }
+
+    function csvCell(v) {
+      v = String(v == null ? "" : v);
+      if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; // neutralise spreadsheet formulas
+      return '"' + v.replace(/"/g, '""') + '"';
+    }
+    $("#a-export").on("click", function () {
+      var out = [["Event", "Event date", "Name", "Email", "Registered"]], n = 0;
+      visibleEvents().forEach(function (e) {
+        var rows = rowsFor(String(e.id));
+        if (!Array.isArray(rows)) return;
+        rows.forEach(function (r) { n++; out.push([e.title, shortDate(e.starts_at), r.name, r.email, shortDate(r.date)]); });
+      });
+      if (!n) return UI.toast("Nothing to export.", "error");
+      var csv = "\ufeff" + out.map(function (r) { return r.map(csvCell).join(","); }).join("\r\n");
+      var url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      var a = $('<a download="registrations.csv"></a>').attr("href", url).appendTo("body")[0];
+      a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      UI.toast("Exported " + n + (n === 1 ? " row." : " rows."), "success");
+    });
+
+    $("#a-q").on("input", render);
+    $("#a-event").on("change", render);
+
+    function start() {
+      $("#list").html(UI.skeleton(3));
+      Api.get("/events").done(function (res) {
+        events = (res.data || []).slice().sort(function (a, b) { return new Date(a.starts_at) - new Date(b.starts_at); });
+        var $s = $("#a-event"); $s.find("option:gt(0)").remove();
+        events.forEach(function (e) { $s.append($("<option>").val(e.id).text(e.title)); });
+        render();
+        events.forEach(loadAtt);
+      }).fail(function (err) { UI.errorState($("#list"), err.message, start); });
+    }
+    start();
+  }
+
+  function init() {
+    // ROLE GUARD: UI only: admins get the per-event attendee view instead of personal registrations/cancel controls.
+    if (isAdmin()) return adminInit();
+    $("#list").html(UI.skeleton(4));
+    Api.get("/event-registrations/my-registrations").done(function (res) { items = res.data || []; render(); })
+      .fail(function (err) { UI.errorState($("#list"), err.message, init); });
+  }
+  init();
+});
+</script>
+</body>
+</html>
