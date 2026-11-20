@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="assets/favicon.png?v=2">
+<title>Log in - Civic Events</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/layout.js"></script>
+<link rel="stylesheet" href="css/app.css">
+<script>addEventListener("load",function(){requestAnimationFrame(function(){document.body.classList.add("ready")})});</script>
+</head>
+<body data-bare class="min-h-screen bg-ivory text-slate-800 flex items-center justify-center p-4">
+<a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:bg-white focus:px-3 focus:py-2 focus:rounded focus:z-50">Skip to content</a>
+<main id="main-content" tabindex="-1" class="w-full max-w-md rounded-md bg-white border border-gray-200 shadow-sm p-6 sm:p-8">
+  <img src="assets/logo.png" alt="Civic Event" class="mx-auto h-20 w-auto mb-4">
+  <h1 class="text-3xl font-extrabold tracking-tight">Log in</h1>
+  <p class="text-sm text-slate-600 mt-1">Welcome back to Civic Events.</p>
+  <div id="flash" role="status" aria-live="polite" class="hidden mt-4 rounded bg-mint text-navy text-sm px-3 py-2"></div>
+  <div id="form-error" role="alert" aria-live="assertive" class="hidden mt-4 rounded bg-red-50 text-red-800 text-sm px-3 py-2"></div>
+  <form id="login-form" class="mt-5 space-y-4" novalidate>
+    <div>
+      <label for="email" class="text-sm font-medium">Email</label>
+      <input id="email" type="email" autocomplete="email" required aria-describedby="email-err" class="mt-1 block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-teal">
+      <p id="email-err" aria-live="polite" class="text-xs text-red-700 mt-1"></p>
+    </div>
+    <div>
+      <label for="password" class="text-sm font-medium">Password</label>
+      <div class="relative">
+        <input id="password" type="password" autocomplete="current-password" required aria-describedby="password-err" class="mt-1 block w-full rounded border border-gray-300 px-3 py-2 pr-16 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-teal">
+        <button type="button" id="toggle-pw" aria-controls="password" aria-pressed="false" class="absolute inset-y-0 right-0 mt-1 px-3 text-xs font-medium text-brand-700 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-teal">Show</button>
+      </div>
+      <p id="password-err" aria-live="polite" class="text-xs text-red-700 mt-1"></p>
+    </div>
+    <label class="flex items-center gap-2 text-sm"><input id="remember" type="checkbox" class="h-4 w-4 rounded border-gray-300"> Remember me</label>
+    <button id="submit" type="submit" class="w-full rounded bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-teal focus-visible:ring-offset-2">Log in</button>
+  </form>
+  <p class="text-sm text-slate-600 mt-5 text-center">No account? <a href="signup.html" class="text-brand-700 font-medium underline">Sign up</a></p>
+</main>
+<script>
+$(function () {
+  if (Auth.isLoggedIn()) { location.replace("dashboard.html"); return; }
+  try {
+    var f = sessionStorage.getItem("ce_flash");
+    if (f) { $("#flash").text(f).removeClass("hidden"); sessionStorage.removeItem("ce_flash"); }
+  } catch (e) {}
+
+  $("#toggle-pw").on("click", function () {
+    var show = $("#password").attr("type") === "password";
+    $("#password").attr("type", show ? "text" : "password");
+    $(this).text(show ? "Hide" : "Show").attr("aria-pressed", show);
+  });
+
+  function setErr(id, msg) { $("#" + id + "-err").text(msg || ""); $("#" + id).attr("aria-invalid", !!msg); }
+
+  $("#login-form").on("submit", function (e) {
+    e.preventDefault();
+    var email = $("#email").val().trim(), password = $("#password").val();
+    $("#form-error").addClass("hidden").text("");
+    setErr("email", !email ? "Email is required." : !/^\S+@\S+\.\S+$/.test(email) ? "Enter a valid email address." : "");
+    setErr("password", password ? "" : "Password is required.");
+    if ($("[aria-invalid=true]").length) { $("[aria-invalid=true]").first().trigger("focus"); return; }
+
+    var $btn = $("#submit");
+    UI.loading($btn, true, "Logging in...");
+    // silent: a 401 here means wrong credentials, shown inline (not "session expired").
+    Api.post("/auth/login", { email: email, password: password }, { silent: true })
+      .done(function (res) {
+        Auth.save(res.data.token, res.data.user, $("#remember").is(":checked"));
+        // STATUS GUARD: disabled accounts are signed out and sent back here with a flash message.
+        Auth.checkActive().done(function (ok) { if (ok) location.replace("dashboard.html"); });
+      })
+      .fail(function (err) {
+        UI.loading($btn, false);
+        (err.errors || []).forEach(function (x) { if (x.field === "email" || x.field === "password") setErr(x.field, x.message); });
+        $("#form-error").text(err.message).removeClass("hidden");
+      });
+  });
+});
+</script>
+</body>
+</html>

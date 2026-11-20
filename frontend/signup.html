@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="assets/favicon.png?v=2">
+<title>Sign up - Civic Events</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/layout.js"></script>
+<link rel="stylesheet" href="css/app.css">
+<script>addEventListener("load",function(){requestAnimationFrame(function(){document.body.classList.add("ready")})});</script>
+</head>
+<body data-bare class="min-h-screen bg-ivory text-slate-800 flex items-center justify-center p-4">
+<a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:bg-white focus:px-3 focus:py-2 focus:rounded focus:z-50">Skip to content</a>
+<main id="main-content" tabindex="-1" class="w-full max-w-md rounded-md bg-white border border-gray-200 shadow-sm p-6 sm:p-8">
+  <img src="assets/logo.png" alt="Civic Event" class="mx-auto h-20 w-auto mb-4">
+  <h1 class="text-3xl font-extrabold tracking-tight">Create your account</h1>
+  <div id="form-error" role="alert" aria-live="assertive" class="hidden mt-4 rounded bg-red-50 text-red-800 text-sm px-3 py-2"></div>
+  <form id="signup-form" class="mt-5 space-y-4" novalidate>
+    <div>
+      <label for="full_name" class="text-sm font-medium">Full name</label>
+      <input id="full_name" type="text" autocomplete="name" required aria-describedby="full_name-err" class="mt-1 block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-teal">
+      <p id="full_name-err" aria-live="polite" class="text-xs text-red-700 mt-1"></p>
+    </div>
+    <div>
+      <label for="email" class="text-sm font-medium">Email</label>
+      <input id="email" type="email" autocomplete="email" required aria-describedby="email-err" class="mt-1 block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-teal">
+      <p id="email-err" aria-live="polite" class="text-xs text-red-700 mt-1"></p>
+    </div>
+    <div>
+      <label for="password" class="text-sm font-medium">Password</label>
+      <div class="relative">
+        <input id="password" type="password" autocomplete="new-password" required aria-describedby="strength rules password-err" class="mt-1 block w-full rounded border border-gray-300 px-3 py-2 pr-16 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-teal">
+        <button type="button" data-toggle="password" aria-controls="password" aria-pressed="false" class="absolute inset-y-0 right-0 mt-1 px-3 text-xs font-medium text-brand-700 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-teal">Show</button>
+      </div>
+      <div class="mt-2 h-2 rounded bg-slate-200 overflow-hidden" aria-hidden="true"><div id="meter" class="h-full transition-all" style="width:0"></div></div>
+      <p id="strength" aria-live="polite" class="text-xs text-slate-600 mt-1">Password strength: <span id="strength-label">-</span></p>
+      <ul id="rules" class="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-x-3 text-xs text-slate-600">
+        <li data-rule="len">8+ characters</li>
+        <li data-rule="upper">Uppercase letter</li>
+        <li data-rule="lower">Lowercase letter</li>
+        <li data-rule="num">Number</li>
+        <li data-rule="special">Special character</li>
+      </ul>
+      <p id="password-err" aria-live="polite" class="text-xs text-red-700 mt-1"></p>
+    </div>
+    <div>
+      <label for="confirm_password" class="text-sm font-medium">Confirm password</label>
+      <div class="relative">
+        <input id="confirm_password" type="password" autocomplete="new-password" required aria-describedby="confirm_password-err" class="mt-1 block w-full rounded border border-gray-300 px-3 py-2 pr-16 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-teal">
+        <button type="button" data-toggle="confirm_password" aria-controls="confirm_password" aria-pressed="false" class="absolute inset-y-0 right-0 mt-1 px-3 text-xs font-medium text-brand-700 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-teal">Show</button>
+      </div>
+      <p id="confirm_password-err" aria-live="polite" class="text-xs text-red-700 mt-1"></p>
+    </div>
+    <button id="submit" type="submit" disabled class="w-full rounded bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-teal focus-visible:ring-offset-2">Sign up</button>
+  </form>
+  <p class="text-sm text-slate-600 mt-5 text-center">Already registered? <a href="login.html" class="text-brand-700 font-medium underline">Log in</a></p>
+</main>
+<script>
+$(function () {
+  if (Auth.isLoggedIn()) { location.replace("dashboard.html"); return; }
+  var rules = {
+    len: function (p) { return p.length >= 8; }, upper: function (p) { return /[A-Z]/.test(p); },
+    lower: function (p) { return /[a-z]/.test(p); }, num: function (p) { return /\d/.test(p); },
+    special: function (p) { return /[^A-Za-z0-9]/.test(p); }
+  };
+  // [label, width, color] indexed by number of rules passed
+  var levels = [["-", "0", ""], ["Weak", "20%", "#dc2626"], ["Weak", "40%", "#dc2626"], ["Fair", "60%", "#d97706"], ["Good", "80%", "#65a30d"], ["Strong", "100%", "#059669"]];
+
+  function state() {
+    var p = $("#password").val(), c = $("#confirm_password").val();
+    var score = Object.keys(rules).filter(function (k) { return rules[k](p); }).length;
+    return {
+      p: p, c: c, score: score, pwOk: score === 5, match: !!c && p === c,
+      nameOk: !!$("#full_name").val().trim(), mailOk: /^\S+@\S+\.\S+$/.test($("#email").val().trim())
+    };
+  }
+  function refresh() {
+    var s = state(), lv = levels[s.score];
+    $("#meter").css({ width: lv[1], background: lv[2] });
+    $("#strength-label").text(lv[0]);
+    $("#rules li").each(function () {
+      var ok = rules[$(this).data("rule")](s.p);
+      $(this).toggleClass("text-emerald-700", ok).toggleClass("text-slate-600", !ok)
+        .attr("data-ok", ok ? "Met: " : "Not met: ");
+      this.setAttribute("aria-label", (ok ? "Met: " : "Not met: ") + $(this).text().replace(/^[^\w]+/, ""));
+      this.dataset.mark = ok ? "✓" : "○";
+    });
+    $("#confirm_password-err").text(s.c && !s.match ? "Passwords do not match." : "");
+    $("#submit").prop("disabled", !(s.nameOk && s.mailOk && s.pwOk && s.match));
+  }
+  $("<style>").text("#rules li::before{content:attr(data-mark) ' '}").appendTo("head");
+  $("#signup-form input").on("input", refresh);
+  refresh();
+
+  $("[data-toggle]").on("click", function () {
+    var $i = $("#" + $(this).data("toggle")), show = $i.attr("type") === "password";
+    $i.attr("type", show ? "text" : "password");
+    $(this).text(show ? "Hide" : "Show").attr("aria-pressed", show);
+  });
+
+  $("#signup-form").on("submit", function (e) {
+    e.preventDefault();
+    var s = state();
+    if (!(s.nameOk && s.mailOk && s.pwOk && s.match)) return;
+    $("#form-error").addClass("hidden").text("");
+    $("#full_name-err, #email-err, #password-err").text("");
+    var $btn = $("#submit");
+    UI.loading($btn, true, "Creating account...");
+    // Never send role: the server assigns it.
+    Api.post("/auth/signup", { full_name: $("#full_name").val().trim(), email: $("#email").val().trim(), password: s.p }, { silent: true })
+      .done(function () {
+        try { sessionStorage.setItem("ce_flash", "Account created! Please log in."); } catch (e) {}
+        UI.toast("Account created! Redirecting to login...", "success");
+        setTimeout(function () { location.replace("login.html"); }, 700);
+      })
+      .fail(function (err) {
+        UI.loading($btn, false);
+        refresh();
+        (err.errors || []).forEach(function (x) { $("#" + x.field + "-err").text(x.message); });
+        $("#form-error").text(err.status === 409 ? "That email is already registered. Try logging in." : err.message).removeClass("hidden");
+      });
+  });
+});
+</script>
+</body>
+</html>
