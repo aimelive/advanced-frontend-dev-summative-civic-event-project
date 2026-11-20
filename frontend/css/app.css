@@ -1,0 +1,94 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
+
+/* Design tokens (mirrored in the Tailwind config in js/layout.js).
+   AA: use --teal-700 / --gold-700 for text on light backgrounds; --teal / --gold are for fills, icons and use on navy. */
+:root {
+  --navy: #0F3D56; --navy-900: #0A2C40;
+  --teal: #1BA3A3; --teal-700: #0F7C7C; --teal-800: #0B6464;
+  --gold: #E8A33D; --gold-700: #8F5A06;
+  --ivory: #FAF8F2; --mint: #F1F7F6;
+  --line: #e5e7eb;
+}
+
+body { font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif; background: var(--ivory); color: #1f2937; }
+h1, h2, h3 { color: var(--navy); letter-spacing: -0.02em; line-height: 1.15; }
+h1 { font-weight: 800; }
+h2, h3 { font-weight: 700; }
+p { line-height: 1.6; }
+a { text-underline-offset: 2px; }
+
+/* ---------- Buttons: small, square-ish ---------- */
+.btn-primary, .btn-secondary, .btn-ghost {
+  display: inline-flex; align-items: center; justify-content: center; gap: .375rem;
+  border-radius: .25rem; padding: .5rem 1rem; font-size: .8125rem; font-weight: 700; line-height: 1.25;
+  transition: background-color .15s, color .15s, border-color .15s;
+}
+.btn-primary { background: var(--teal-700); color: #fff; border: 1px solid var(--teal-700); }
+.btn-primary:hover { background: var(--teal-800); border-color: var(--teal-800); }
+.btn-secondary { background: #fff; color: var(--navy); border: 1px solid var(--navy); }
+.btn-secondary:hover { background: var(--mint); }
+.btn-ghost { color: #fff; border: 1px solid rgba(255,255,255,.7); }
+.btn-ghost:hover { background: rgba(255,255,255,.12); }
+.btn-primary:disabled, .btn-secondary:disabled { opacity: .6; cursor: not-allowed; }
+.btn-primary:focus-visible, .btn-secondary:focus-visible, .btn-ghost:focus-visible,
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.bg-navy .btn-primary:focus-visible, .bg-navy a:focus-visible, .bg-navy-900 a:focus-visible { outline-color: #fff; }
+
+/* ---------- Form fields ---------- */
+input:not([type=checkbox]):not([type=radio]):not([type=file]), select, textarea { background: #fff; color: #1f2937; }
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--teal); outline-offset: 1px; border-color: var(--teal-700);
+}
+input[type=checkbox], input[type=radio] { accent-color: var(--teal-700); }
+
+/* ---------- Cards: white, thin border, small radius, subtle shadow, hover lift ---------- */
+.card, .bg-white.border.border-slate-200 {
+  background: #fff; border: 1px solid var(--line); border-radius: .375rem;
+  box-shadow: 0 1px 2px rgba(15, 61, 86, .05);
+}
+.grid > article.bg-white, .card-hover { transition: transform .18s ease, box-shadow .18s ease; }
+.grid > article.bg-white:hover, .card-hover:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(15, 61, 86, .10); }
+
+/* ---------- Small helpers ---------- */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.eyebrow { font-size: .6875rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--gold-700); }
+.link-more { font-size: .75rem; font-weight: 700; color: var(--gold-700); }
+.link-more:hover { text-decoration: underline; }
+.on-navy .link-more { color: var(--gold); }
+.badge-gold { display: inline-block; font-size: .6875rem; font-weight: 700; padding: .125rem .5rem; border-radius: .25rem; background: #FDF1DC; color: var(--gold-700); }
+.section-light { background: var(--mint); }
+.section-ivory { background: var(--ivory); }
+.section-navy { background: var(--navy); color: #cbd5e1; }
+.section-navy h1, .section-navy h2, .section-navy h3 { color: #fff; }
+.section-navy .link-more { color: var(--gold); }
+
+/* Rating stars (event.html) */
+.stars label { color: #cbd5e1; }
+.stars input:checked ~ label, .stars label:hover, .stars label:hover ~ label { color: var(--gold); }
+
+/* ---------- Page transition + reveal (unchanged behavior) ---------- */
+@view-transition { navigation: auto; }
+
+/* Hide until Tailwind + layout.js are ready (js/layout.js adds .ready); stays visible if scripting is off. */
+body:not(.ready) { opacity: 0; }
+body.ready { opacity: 1; transition: opacity 150ms ease-out; }
+@media (scripting: none) { body:not(.ready) { opacity: 1; } }
+
+/* Navbar keeps its own transition group so it stays still; only <main> fades/slides. */
+#site-header { view-transition-name: site-header; }
+main { view-transition-name: page-main; }
+::view-transition-group(site-header) { animation-duration: 0s; }
+::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+::view-transition-old(page-main) { animation: vt-out 120ms ease-in both; }
+::view-transition-new(page-main) { animation: vt-in 200ms ease-out both; }
+@keyframes vt-out { to { opacity: 0; transform: translateY(-4px); } }
+@keyframes vt-in { from { opacity: 0; transform: translateY(8px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  body.ready { transition: none; }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+  .grid > article.bg-white, .card-hover, .btn-primary, .btn-secondary, .btn-ghost { transition: none; }
+  .grid > article.bg-white:hover, .card-hover:hover { transform: none; }
+  .animate-pulse, .animate-spin { animation: none !important; }
+}
