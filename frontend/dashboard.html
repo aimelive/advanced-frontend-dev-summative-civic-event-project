@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="assets/favicon.png?v=2">
+<title>Home - Civic Events</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/layout.js"></script>
+<script src="js/event-utils.js"></script>
+<script src="js/media-utils.js"></script>
+<script>requireAuth();</script>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header id="site-header" class="h-16"></header>
+<main id="main-content" class="w-full">
+
+  <!-- Hero: welcome + latest events -->
+  <section aria-labelledby="hero-h" class="bg-gradient-to-br from-mint via-mint to-[#F6EFD9]">
+    <div class="mx-auto max-w-6xl px-4 py-12 sm:py-16 grid gap-10 lg:grid-cols-2 lg:items-center">
+      <div>
+        <p class="eyebrow">Role: <span id="user-role" class="capitalize"></span></p>
+        <h1 id="hero-h" class="mt-2 text-4xl sm:text-5xl font-extrabold tracking-tight">Welcome, <span id="user-name"></span></h1>
+        <p class="mt-4 max-w-md text-sm text-slate-600">Your community hub for local events, audio announcements and promos, all in one place.</p>
+        <a href="events.html" class="btn-primary mt-6">Explore events</a>
+      </div>
+      <div>
+        <h2 class="sr-only">Latest events</h2>
+        <div id="hero-events" aria-live="polite" class="space-y-3"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Feature cards (admin link is appended to #links by script) -->
+  <section aria-labelledby="links-h" class="bg-white border-y border-gray-200">
+    <div class="mx-auto max-w-6xl px-4 py-12 sm:py-14">
+      <h2 id="links-h" class="text-2xl sm:text-3xl font-extrabold tracking-tight max-w-lg">Everything your community is up to</h2>
+      <p class="mt-3 max-w-lg text-sm text-slate-600">Jump straight to what you need.</p>
+      <div id="links" class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 [&>a.btn-primary]:col-span-full [&>a.btn-primary]:justify-self-start">
+        <a href="events.html" class="card card-hover block p-5 no-underline">
+          <svg aria-hidden="true" class="h-6 w-6 text-navy" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5"/></svg>
+          <h3 class="mt-4 text-sm font-bold">Events</h3>
+          <p class="mt-1 text-xs text-slate-600">Find and register for what's happening nearby.</p>
+        </a>
+        <a href="announcements.html" class="card card-hover block p-5 no-underline">
+          <svg aria-hidden="true" class="h-6 w-6 text-navy" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.69-.1-1.37-.1-2.06 0M3 11.25v1.5A2.25 2.25 0 0 0 5.25 15h.75l1.5 4.5h2.25L8.25 15h2.25l7.5 3.75v-13.5L10.5 9H5.25A2.25 2.25 0 0 0 3 11.25ZM20.25 9.75v4.5"/></svg>
+          <h3 class="mt-4 text-sm font-bold">Announcements</h3>
+          <p class="mt-1 text-xs text-slate-600">Listen to the latest audio updates.</p>
+        </a>
+        <a href="promos.html" class="card card-hover block p-5 no-underline">
+          <svg aria-hidden="true" class="h-6 w-6 text-navy" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9A2.25 2.25 0 0 0 13.5 5.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z"/></svg>
+          <h3 class="mt-4 text-sm font-bold">Promos</h3>
+          <p class="mt-1 text-xs text-slate-600">Watch short videos from organisers.</p>
+        </a>
+        <a href="my-registrations.html" class="card card-hover block p-5 no-underline">
+          <svg aria-hidden="true" class="h-6 w-6 text-navy" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+          <h3 class="mt-4 text-sm font-bold">My registrations</h3>
+          <p class="mt-1 text-xs text-slate-600">See the events you've signed up for.</p>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Your activity (stats from /dashboard/me) -->
+  <section aria-labelledby="stats-h" class="section-light">
+    <div class="mx-auto max-w-6xl px-4 py-10">
+      <h2 id="stats-h" class="text-xl font-extrabold tracking-tight mb-4">Your activity</h2>
+      <div id="stats" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <!-- Upcoming events (navy) -->
+  <section aria-labelledby="up-h" class="section-navy on-navy">
+    <div class="mx-auto max-w-6xl px-4 py-12 sm:py-14">
+      <div class="flex items-end justify-between gap-4">
+        <h2 id="up-h" class="text-2xl sm:text-3xl font-extrabold tracking-tight">Upcoming events</h2>
+        <a href="events.html" class="link-more">View all &rarr;</a>
+      </div>
+      <div id="upcoming" class="mt-8"></div>
+    </div>
+  </section>
+
+  <!-- Latest promos -->
+  <section aria-labelledby="pr-h" class="section-ivory">
+    <div class="mx-auto max-w-6xl px-4 py-12 sm:py-14">
+      <div class="flex items-end justify-between gap-4">
+        <h2 id="pr-h" class="text-2xl sm:text-3xl font-extrabold tracking-tight">Latest promos</h2>
+        <a href="promos.html" class="link-more">More promos &rarr;</a>
+      </div>
+      <div id="promos" class="mt-8"></div>
+    </div>
+  </section>
+
+  <!-- Latest announcements -->
+  <section aria-labelledby="an-h" class="section-light">
+    <div class="mx-auto max-w-6xl px-4 py-12 sm:py-14">
+      <div class="flex items-end justify-between gap-4">
+        <h2 id="an-h" class="text-2xl sm:text-3xl font-extrabold tracking-tight">Latest announcements</h2>
+        <a href="announcements.html" class="link-more">More announcements &rarr;</a>
+      </div>
+      <div id="announcements" class="mt-8"></div>
+    </div>
+  </section>
+
+  <!-- Help CTA strip -->
+  <section aria-labelledby="help-h" class="section-navy on-navy">
+    <div class="mx-auto max-w-6xl px-4 py-12 flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+      <h2 id="help-h" class="text-2xl sm:text-3xl font-extrabold tracking-tight max-w-md">Need help? Get in touch with us for any support.</h2>
+      <a href="contact.html" class="btn-primary self-start sm:self-auto">Contact us</a>
+    </div>
+  </section>
+</main>
+<footer id="site-footer"></footer>
+<script>
+$(function () {
+  var user = Auth.getUser();
+  if (!user) return;
+  $("#user-name").text(user.full_name);
+  $("#user-role").text(user.role);
+  // ROLE GUARD: admin dashboard link for admins only.
+  if (isAdmin()) $("#links").append('<a class="btn-primary text-center" href="admin-dashboard.html">Admin dashboard</a>');
+
+  function label(k) { return k.replace(/_/g, " ").replace(/^./, function (c) { return c.toUpperCase(); }); }
+
+  function load() {
+    $("#stats").html(UI.skeleton(3));
+    Api.get("/dashboard/me").done(function (res) {
+      var d = res.data || {};
+      // Shape: {registrations:{total_registered_events}, feedbacks:{...}, notifications:{total,unread}, announcements:{...}, promos:{...}}.
+      // Flatten one level of nested objects into {label: value}; scalars at the top level are kept too.
+      var flat = [];
+      Object.keys(d).forEach(function (k) {
+        var v = d[k];
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          Object.keys(v).forEach(function (k2) { if (["number", "string"].indexOf(typeof v[k2]) > -1) flat.push([k2, v[k2]]); });
+        } else if (["number", "string"].indexOf(typeof v) > -1) flat.push([k, v]);
+      });
+      var keys = flat;
+      if (!keys.length) { $("#stats").html(UI.emptyState("No stats yet", "Register for events to see your activity here.")); return; }
+      var $g = $('<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"></div>');
+      keys.forEach(function (kv) {
+        $g.append($('<div class="rounded-md bg-white border border-gray-200 p-4"></div>')
+          .append($('<p class="text-sm text-slate-600"></p>').text(label(kv[0].replace(/^total_/, ""))))
+          .append($('<p class="text-2xl font-extrabold text-navy mt-1"></p>').text(kv[1])));
+      });
+      $("#stats").empty().append($g);
+    }).fail(function (err) { UI.errorState($("#stats"), err.message, load); });
+  }
+  load();
+
+  // ---- Home sections (same endpoints as the list pages) ----
+  var regs = {};
+
+  function byStart(a, b) { return new Date(a.starts_at) - new Date(b.starts_at); }
+  // Soonest upcoming first, then the most recent past events so the section is never empty.
+  function pickEvents(list, n) {
+    var now = new Date();
+    var up = list.filter(function (e) { return new Date(e.ends_at || e.starts_at) >= now; }).sort(byStart);
+    var past = list.filter(function (e) { return up.indexOf(e) < 0; }).sort(byStart).reverse();
+    return up.concat(past).slice(0, n);
+  }
+
+  function heroRow(e) {
+    var $a = $('<a class="card card-hover block p-4 no-underline"></a>').attr("href", "event.html?id=" + encodeURIComponent(e.id));
+    $a.append($('<p class="text-xs text-slate-600"></p>').text(EventUtils.range(e)));
+    $a.append($('<h3 class="mt-1 text-sm font-bold leading-snug"></h3>').text(e.title));
+    $a.append('<span class="link-more mt-2 inline-block">Read more &rarr;</span>');
+    return $a;
+  }
+
+  function eventCard(e) {
+    var img = EventUtils.imageUrl(e);
+    var $c = $('<article class="flex flex-col rounded-md bg-white border border-gray-200 overflow-hidden text-slate-800"></article>');
+    $c.append(img
+      ? $('<img loading="lazy" class="h-36 w-full object-cover bg-slate-100">').attr({ src: img, alt: "" })
+      : '<div class="h-36 w-full bg-brand-100" aria-hidden="true"></div>');
+    var $b = $('<div class="flex flex-col flex-1 p-4"></div>').appendTo($c);
+    var $et = $('<h3 class="font-bold text-sm leading-snug"></h3>').append($('<a class="hover:underline"></a>').attr("href", "event.html?id=" + encodeURIComponent(e.id)).text(e.title)).appendTo($b);
+    // ROLE GUARD: Draft badge is admin-only (users only receive published items).
+    if (isAdmin() && e.published === false) $et.append('<span class="ml-1 text-xs font-medium rounded bg-[#FDF1DC] text-gold-700 px-2 py-0.5">Draft</span>');
+    $b.append($('<p class="text-xs text-slate-600 mt-1"></p>').text(EventUtils.range(e)));
+    $b.append($('<p class="text-xs text-slate-600"></p>').text(e.location || ""));
+    var $a = $('<div class="mt-auto pt-4"></div>').appendTo($b);
+    // ROLE GUARD: Register is for users; admins get a View link instead.
+    if (!isAdmin()) {
+      var $r = $('<button type="button" class="btn-primary"></button>').text(regs[String(e.id)] ? "Registered" : "Register")
+        .prop("disabled", !!regs[String(e.id)]).attr("aria-label", "Register for " + e.title);
+      $r.on("click", function () {
+        UI.loading($r, true, "Registering...");
+        Api.post("/event-registrations/register", { event_id: e.id }).done(function () {
+          regs[String(e.id)] = true; UI.toast("You're registered!", "success");
+          UI.loading($r, false); $r.text("Registered").prop("disabled", true);
+        }).fail(function (err) { UI.loading($r, false); UI.toast(err.message, "error"); });
+      });
+      $a.append($r);
+    } else {
+      $a.append($('<a class="btn-secondary"></a>').attr("href", "event.html?id=" + encodeURIComponent(e.id)).text("View").attr("aria-label", "View " + e.title));
+    }
+    return $c;
+  }
+
+  function renderEvents(list) {
+    var top = pickEvents(list, 4);
+    var $h = $("#hero-events").empty();
+    if (!top.length) $h.html(UI.emptyState("No events yet", "Check back soon."));
+    else top.slice(0, 3).forEach(function (e) { $h.append(heroRow(e)); });
+    var $u = $("#upcoming").empty();
+    if (!top.length) return $u.html(UI.emptyState("No upcoming events", "Check back soon."));
+    var $g = $('<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"></div>').appendTo($u);
+    top.forEach(function (e) { $g.append(eventCard(e)); });
+  }
+
+  function loadEvents() {
+    $("#hero-events").html(UI.skeleton(1)); $("#upcoming").html(UI.skeleton(4));
+    Api.get("/events").done(function (res) {
+      var list = (res.data || []).filter(EventUtils.visible);
+      if (isAdmin()) return renderEvents(list);
+      // Registration state is a nice-to-have: ignore its failure.
+      Api.get("/event-registrations/my-registrations", null, { silent: true }).done(function (r) {
+        (r.data || []).forEach(function (x) { regs[EventUtils.regEventId(x)] = true; });
+      }).always(function () { renderEvents(list); });
+    }).fail(function (err) {
+      UI.errorState($("#hero-events"), err.message, loadEvents);
+      UI.errorState($("#upcoming"), err.message, loadEvents);
+    });
+  }
+  loadEvents();
+
+  function loadPromos() {
+    $("#promos").html(UI.skeleton(3));
+    Api.get("/promos").done(function (res) {
+      var list = (res.data || []).filter(Media.visible).sort(function (a, b) { return new Date(b.created_at) - new Date(a.created_at); }).slice(0, 3);
+      var $p = $("#promos").empty();
+      if (!list.length) return $p.html(UI.emptyState("No promos yet", "Check back soon."));
+      var $g = $('<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>').appendTo($p);
+      list.forEach(function (p) {
+        var $c = $('<article class="flex flex-col rounded-md bg-white border border-gray-200 overflow-hidden"></article>');
+        $c.append($('<video preload="metadata" muted playsinline tabindex="-1" aria-hidden="true" class="h-40 w-full object-cover bg-slate-900"></video>').attr("src", Media.url(p.video_url) + "#t=0.1"));
+        var $b = $('<div class="flex flex-col flex-1 p-4 gap-2"></div>').appendTo($c);
+        var $pt = $('<h3 class="font-bold text-sm"></h3>').text(p.title).appendTo($b);
+        // ROLE GUARD: Draft badge is admin-only.
+        if (isAdmin() && p.published === false) $pt.append('<span class="ml-1 text-xs font-medium rounded bg-[#FDF1DC] text-gold-700 px-2 py-0.5">Draft</span>');
+        $b.append($('<p class="text-xs text-slate-600 line-clamp-2"></p>').text(p.description || ""));
+        $b.append($('<a class="link-more mt-auto pt-2"></a>').attr({ href: "promo.html?id=" + encodeURIComponent(p.id), "aria-label": "Play " + p.title }).html("Play &rarr;"));
+        $g.append($c);
+      });
+    }).fail(function (err) { UI.errorState($("#promos"), err.message, loadPromos); });
+  }
+  loadPromos();
+
+  function loadAnnouncements() {
+    $("#announcements").html(UI.skeleton(3));
+    Api.get("/announcements").done(function (res) {
+      var list = (res.data || []).filter(Media.visible).sort(function (a, b) { return new Date(b.created_at) - new Date(a.created_at); }).slice(0, 3);
+      var $a = $("#announcements").empty();
+      if (!list.length) return $a.html(UI.emptyState("No announcements yet", "Check back soon."));
+      var $g = $('<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>').appendTo($a);
+      list.forEach(function (a) {
+        var $c = $('<article class="flex flex-col rounded-md bg-white border border-gray-200 p-4"></article>');
+        $c.append($('<p class="text-xs text-slate-600"></p>').text(Media.fmtDate(a.created_at)));
+        var $at = $('<h3 class="mt-1 font-bold text-sm leading-snug"></h3>').text(a.title).appendTo($c);
+        // ROLE GUARD: Draft badge is admin-only.
+        if (isAdmin() && a.published === false) $at.append('<span class="ml-1 text-xs font-medium rounded bg-[#FDF1DC] text-gold-700 px-2 py-0.5">Draft</span>');
+        $c.append($('<a class="link-more mt-auto pt-3"></a>').attr({ href: "announcement.html?id=" + encodeURIComponent(a.id), "aria-label": "Listen to " + a.title }).html("Listen &rarr;"));
+        $g.append($c);
+      });
+    }).fail(function (err) { UI.errorState($("#announcements"), err.message, loadAnnouncements); });
+  }
+  loadAnnouncements();
+});
+</script>
+</body>
+</html>

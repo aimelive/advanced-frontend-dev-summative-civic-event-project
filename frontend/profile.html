@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="assets/favicon.png?v=2">
+<title>Profile - Civic Events</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/layout.js"></script>
+<script>requireAuth();</script>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header id="site-header" class="h-16"></header>
+<main id="main-content" class="mx-auto w-full max-w-6xl px-4 py-8 sm:py-10 space-y-5">
+  <h1 class="text-3xl font-extrabold tracking-tight">My profile</h1>
+  <div id="state"></div>
+  <section id="info" class="hidden rounded-md bg-white border border-gray-200 p-5 space-y-4" aria-labelledby="info-h">
+    <h2 id="info-h" class="font-semibold">Account</h2>
+    <dl class="grid grid-cols-[auto,1fr] gap-x-4 gap-y-2 text-sm">
+      <dt class="text-slate-500">Name</dt><dd id="v-name"></dd>
+      <dt class="text-slate-500">Email</dt><dd id="v-email" class="break-all"></dd>
+      <dt class="text-slate-500">Role</dt><dd><span id="v-role" class="rounded bg-brand-100 text-brand-700 px-2 py-0.5 text-xs font-medium"></span></dd>
+      <dt class="text-slate-500">Status</dt><dd><span id="v-active" class="rounded px-2 py-0.5 text-xs font-medium"></span></dd>
+    </dl>
+  </section>
+  <form id="form" class="hidden rounded-md bg-white border border-gray-200 p-5 space-y-4" novalidate aria-labelledby="edit-h">
+    <h2 id="edit-h" class="font-semibold">Edit details</h2>
+    <div id="form-err" role="alert" class="hidden rounded bg-red-50 border border-red-200 text-red-800 text-sm p-3"></div>
+    <div>
+      <label for="full_name" class="block text-sm font-medium">Full name</label>
+      <input id="full_name" name="full_name" type="text" autocomplete="name" required aria-describedby="full_name-e" class="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm">
+      <p id="full_name-e" class="mt-1 text-sm text-red-700"></p>
+    </div>
+    <div>
+      <label for="email" class="block text-sm font-medium">Email</label>
+      <input id="email" name="email" type="email" autocomplete="email" required aria-describedby="email-e" class="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm">
+      <p id="email-e" class="mt-1 text-sm text-red-700"></p>
+    </div>
+    <button type="submit" class="btn-primary">Save changes</button>
+  </form>
+</main>
+<footer id="site-footer"></footer>
+<script>
+$(function () {
+  function show(u) {
+    $("#v-name").text(u.full_name); $("#v-email").text(u.email); $("#v-role").text(u.role);
+    var on = u.is_active !== false;
+    $("#v-active").text(on ? "Active" : "Disabled").addClass(on ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800").removeClass(on ? "bg-red-100 text-red-800" : "bg-emerald-100 text-emerald-800");
+    $("#full_name").val(u.full_name); $("#email").val(u.email);
+  }
+
+  function fieldErr(id, msg) {
+    $("#" + id).attr("aria-invalid", msg ? "true" : "false").toggleClass("border-red-500", !!msg).toggleClass("border-gray-300", !msg);
+    $("#" + id + "-e").text(msg || "");
+  }
+
+  function load() {
+    $("#state").html(UI.skeleton(1));
+    Api.get("/users/profile/me").done(function (res) {
+      $("#state").empty(); $("#info,#form").removeClass("hidden"); show(res.data);
+    }).fail(function (err) { UI.errorState($("#state"), err.message, load); });
+  }
+
+  $("#form").on("submit", function (e) {
+    e.preventDefault();
+    var name = $.trim($("#full_name").val()), email = $.trim($("#email").val()), bad = false;
+    $("#form-err").addClass("hidden");
+    fieldErr("full_name", name.length < 2 ? "Enter your full name (at least 2 characters)." : "");
+    fieldErr("email", /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? "" : "Enter a valid email address.");
+    if (name.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return $(".border-red-500").first().trigger("focus");
+    var $b = $("#form [type=submit]"); UI.loading($b, true, "Saving...");
+    Api.patch("/users/profile/me", { full_name: name, email: email }, { silent: true }).done(function (res) {
+      show(res.data || { full_name: name, email: email, role: $("#v-role").text(), is_active: $("#v-active").text() === "Active" });
+      var u = Auth.getUser(); // keep the navbar name in sync
+      if (u) { u.full_name = name; (localStorage.getItem("ce_user") ? localStorage : sessionStorage).setItem("ce_user", JSON.stringify(u)); }
+      UI.toast("Profile updated.", "success");
+    }).fail(function (err) {
+      if (err.status === 409) { fieldErr("email", "That email is already used by another account."); $("#email").trigger("focus"); }
+      else if (err.status === 401) { Auth.clear(); location.replace("login.html"); }
+      else $("#form-err").text(err.message).removeClass("hidden");
+    }).always(function () { UI.loading($b, false); });
+  });
+  load();
+});
+</script>
+</body>
+</html>
