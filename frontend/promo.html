@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="assets/favicon.png?v=2">
+<title>Promo - Civic Events</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/layout.js"></script>
+<script src="js/media-utils.js"></script>
+<script>requireAuth();</script>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header id="site-header" class="h-16"></header>
+<main id="main-content" class="mx-auto w-full max-w-6xl px-4 py-8 sm:py-10">
+  <a href="promos.html" class="text-sm text-brand-700 underline">&larr; All promos</a>
+  <div id="state" class="mt-3"></div>
+  <article id="view" class="hidden mt-3 space-y-4">
+    <h1 id="title" class="text-3xl font-extrabold tracking-tight"></h1>
+    <video id="video" controls preload="metadata" playsinline class="w-full rounded-md bg-black">
+      Your browser can't play this video. <a id="fallback" href="#">Download it</a>.
+    </video>
+    <button id="cc" type="button" class="btn-secondary" aria-pressed="true">Captions: On</button>
+    <p id="desc" class="text-slate-700"></p>
+    <section aria-labelledby="tr-h" class="rounded-md bg-white border border-gray-200 p-4">
+      <h2 id="tr-h" class="font-semibold mb-2">Transcript</h2>
+      <p id="transcript" class="whitespace-pre-line text-sm text-slate-700"></p>
+    </section>
+  </article>
+</main>
+<footer id="site-footer"></footer>
+<script>
+$(function () {
+  var id = new URLSearchParams(location.search).get("id");
+  if (!id) return $("#state").html(UI.emptyState("No promo selected", "Pick one from the list."));
+  var v = $("#video")[0];
+
+  function load() {
+    $("#state").html(UI.skeleton(1));
+    Api.get("/promos/" + encodeURIComponent(id)).done(function (res) {
+      var p = res.data;
+      if (!Media.visible(p)) return $("#state").html(UI.emptyState("Not available", "This promo isn't published."));
+      $("#state").empty(); $("#view").removeClass("hidden");
+      document.title = p.title + " - Civic Events";
+      $("#title").text(p.title);
+      // ROLE GUARD: Draft badge for admins only (Media.visible hides unpublished items from users).
+      if (isAdmin() && p.published === false) $("#title").append('<span class="ml-2 align-middle text-xs font-medium rounded bg-[#FDF1DC] text-gold-700 px-2 py-0.5">Draft</span>');
+      $("#desc").text(p.description || "");
+      $("#transcript").text(p.caption_text || "No transcript available.");
+      var src = Media.url(p.video_url);
+      v.src = src; $("#fallback").attr("href", src);
+
+      // No caption file exists: build WebVTT from caption_text in a Blob and attach as the default track.
+      if (p.caption_text) {
+        var t = document.createElement("track");
+        t.kind = "captions"; t.label = "Captions"; t.srclang = "en"; t.default = true;
+        t.src = Media.vttUrl(p.caption_text);
+        v.appendChild(t);
+        t.track.mode = "showing";
+      } else { $("#cc").addClass("hidden"); }
+    }).fail(function (err) { UI.errorState($("#state"), err.message, load); });
+  }
+
+  $("#cc").on("click", function () {
+    var tr = v.textTracks[0]; if (!tr) return;
+    var on = tr.mode !== "showing";
+    tr.mode = on ? "showing" : "hidden";
+    $(this).attr("aria-pressed", on).text("Captions: " + (on ? "On" : "Off"));
+  });
+  $(v).on("error", function () { UI.toast("This video couldn't be loaded.", "error"); });
+  load();
+});
+</script>
+</body>
+</html>

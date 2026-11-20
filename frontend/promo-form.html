@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="assets/favicon.png?v=2">
+<title>Promo form - Civic Events</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/layout.js"></script>
+<script src="js/media-utils.js"></script>
+<!-- ROLE GUARD: admin only (server enforces too) -->
+<script>requireAdmin();</script>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header id="site-header" class="h-16"></header>
+<main id="main-content" class="mx-auto w-full max-w-6xl px-4 py-8 sm:py-10">
+  <a href="promos.html" class="text-sm text-brand-700 underline">&larr; All promos</a>
+  <h1 id="page-h" class="text-3xl font-extrabold tracking-tight my-3">New promo</h1>
+  <div id="state"></div>
+  <form id="form" novalidate class="space-y-4 rounded-md bg-white border border-gray-200 p-5">
+    <div>
+      <label for="title" class="block text-sm font-medium mb-1">Title *</label>
+      <input id="title" required maxlength="150" class="w-full rounded border border-gray-300 px-3 py-2 text-sm">
+      <p class="text-sm text-red-700" data-err="title"></p>
+    </div>
+    <div>
+      <label for="description" class="block text-sm font-medium mb-1">Description *</label>
+      <textarea id="description" rows="3" required class="w-full rounded border border-gray-300 px-3 py-2 text-sm"></textarea>
+      <p class="text-sm text-red-700" data-err="description"></p>
+    </div>
+    <div>
+      <label for="caption_text" class="block text-sm font-medium mb-1">Caption text / transcript *</label>
+      <textarea id="caption_text" rows="4" required class="w-full rounded border border-gray-300 px-3 py-2 text-sm"></textarea>
+      <p class="text-sm text-red-700" data-err="caption_text"></p>
+    </div>
+    <div>
+      <label for="video" class="block text-sm font-medium mb-1">Video (MP4 or WebM, max 5 MB) <span id="video-req">*</span></label>
+      <input id="video" type="file" accept=".mp4,.webm,video/mp4,video/webm" class="block w-full text-sm">
+      <p class="text-sm text-red-700" data-err="video"></p>
+      <video id="preview" controls preload="metadata" class="hidden mt-3 w-full max-h-64 rounded bg-black"></video>
+    </div>
+    <div class="flex items-center gap-2">
+      <input id="published" type="checkbox" checked class="h-4 w-4">
+      <label for="published" class="text-sm font-medium">Published</label>
+    </div>
+    <div id="prog-wrap" class="hidden">
+      <progress id="prog" max="100" value="0" class="w-full" aria-label="Upload progress"></progress>
+      <p id="prog-t" class="text-xs text-slate-600" aria-live="polite"></p>
+    </div>
+    <p role="alert" class="text-sm text-red-700" data-err="form"></p>
+    <div class="flex gap-2">
+      <button type="submit" id="save" class="btn-primary">Save promo</button>
+      <a href="promos.html" class="btn-secondary">Cancel</a>
+    </div>
+  </form>
+</main>
+<footer id="site-footer"></footer>
+<script>
+$(function () {
+  var id = new URLSearchParams(location.search).get("id"), file = null, $f = $("#form");
+  var TYPES = ["video/mp4", "video/webm"];
+  var setErr = function (k, m) { $f.find('[data-err="' + k + '"]').text(m || ""); };
+
+  function load() {
+    $("#page-h").text("Edit promo"); $("#video-req").text("(optional: leave empty to keep current)");
+    $f.addClass("hidden"); $("#state").html(UI.skeleton(1));
+    Api.get("/promos/" + encodeURIComponent(id)).done(function (res) {
+      var p = res.data;
+      $("#state").empty(); $f.removeClass("hidden");
+      $("#title").val(p.title); $("#description").val(p.description); $("#caption_text").val(p.caption_text);
+      $("#published").prop("checked", p.published !== false);
+      if (p.video_url) $("#preview").attr("src", Media.url(p.video_url)).removeClass("hidden");
+    }).fail(function (err) { UI.errorState($("#state"), err.message, load); });
+  }
+  if (id) load();
+
+  // Type and size are checked BEFORE any upload starts.
+  $("#video").on("change", function () {
+    setErr("video"); file = this.files[0] || null;
+    if (!file) return;
+    var e = Media.checkFile(file, TYPES, 5, "MP4 or WebM video");
+    if (e) { setErr("video", e); file = null; this.value = ""; return; }
+    $("#preview").attr("src", URL.createObjectURL(file)).removeClass("hidden");
+  });
+
+  $f.on("submit", function (e) {
+    e.preventDefault(); $f.find("[data-err]").text("");
+    var ok = true;
+    ["title", "description", "caption_text"].forEach(function (k) {
+      if (!$("#" + k).val().trim()) { setErr(k, "This field is required."); ok = false; }
+    });
+    if (!id && !file) { setErr("video", "Please choose a video file."); ok = false; }
+    if (!ok) return $f.find("[data-err]:not(:empty)").first().prev().trigger("focus");
+
+    var fd = new FormData();
+    ["title", "description", "caption_text"].forEach(function (k) { fd.append(k, $("#" + k).val().trim()); });
+    fd.append("published", $("#published").is(":checked"));
+    if (file) fd.append("video", file);
+
+    var $b = $("#save"); UI.loading($b, true, "Saving...");
+    $("#prog-wrap").toggleClass("hidden", !file);
+    var opts = { onProgress: function (p) { $("#prog").val(p); $("#prog-t").text("Uploading " + p + "%"); } };
+    (id ? Api.put("/promos/" + encodeURIComponent(id), fd, opts) : Api.post("/promos", fd, opts)).done(function () {
+      UI.toast("Promo saved.", "success");
+      setTimeout(function () { location.href = "promos.html"; }, 700);
+    }).fail(function (err) {
+      UI.loading($b, false); $("#prog-wrap").addClass("hidden");
+      (err.errors || []).forEach(function (x) { setErr(x.field, x.message); });
+      setErr("form", err.errors.length ? "Please fix the highlighted fields." : err.message);
+    });
+  });
+});
+</script>
+</body>
+</html>

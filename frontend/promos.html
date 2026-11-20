@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="assets/favicon.png?v=2">
+<title>Promos - Civic Events</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/layout.js"></script>
+<script src="js/media-utils.js"></script>
+<script>requireAuth();</script>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header id="site-header" class="h-16"></header>
+<main id="main-content" class="mx-auto w-full max-w-6xl px-4 py-8 sm:py-10 space-y-5">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-3xl font-extrabold tracking-tight">Promos</h1>
+    <!-- ROLE GUARD: UI only: admins only; server enforces too -->
+    <a id="new-btn" href="promo-form.html" class="btn-primary hidden">New promo</a>
+  </div>
+  <div id="list"></div>
+</main>
+<footer id="site-footer"></footer>
+<script>
+$(function () {
+  var all = [];
+  if (isAdmin()) $("#new-btn").removeClass("hidden");
+
+  function card(p) {
+    var $c = $('<article class="flex flex-col rounded-md bg-white border border-gray-200 overflow-hidden"></article>');
+    // Lazy thumbnail: preload="metadata" + #t=0.1 shows the first frame without downloading the whole video.
+    var $v = $('<video preload="metadata" muted playsinline tabindex="-1" aria-hidden="true" class="h-44 w-full object-cover bg-slate-900"></video>')
+      .attr("src", Media.url(p.video_url) + "#t=0.1");
+    $c.append($v);
+    var $b = $('<div class="flex flex-col flex-1 p-4 gap-2"></div>').appendTo($c);
+    var $h = $('<h2 class="font-semibold text-lg"></h2>').text(p.title).appendTo($b);
+    if (p.published === false) $h.append(' <span class="text-xs font-medium rounded bg-[#FDF1DC] text-gold-700 px-2 py-0.5">Draft</span>');
+    $b.append($('<p class="text-sm text-slate-600 line-clamp-2"></p>').text(p.description || ""));
+    var $a = $('<div class="mt-auto pt-2 space-y-2"></div>').appendTo($b);
+    $a.append($('<a class="btn-primary inline-block"></a>').attr({ href: "promo.html?id=" + encodeURIComponent(p.id), "aria-label": "Play " + p.title }).text("Play"));
+    // ROLE GUARD: UI only: publish/edit/delete rendered for admins only.
+    $a.append(Media.adminActions({
+      base: "/promos", editHref: "promo-form.html", noun: "Promo", item: p,
+      onChange: render,
+      onDelete: function (x) { all = all.filter(function (y) { return y.id !== x.id; }); render(); }
+    }));
+    return $c;
+  }
+
+  function render() {
+    var $l = $("#list").empty();
+    if (!all.length) return $l.html(UI.emptyState("No promos yet", "Check back soon."));
+    var $g = $('<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>').appendTo($l);
+    all.forEach(function (p) { $g.append(card(p)); });
+  }
+
+  function init() {
+    $("#list").html(UI.skeleton(6));
+    Api.get("/promos").done(function (res) {
+      all = (res.data || []).filter(Media.visible);
+      render();
+    }).fail(function (err) { UI.errorState($("#list"), err.message, init); });
+  }
+  init();
+});
+</script>
+</body>
+</html>
