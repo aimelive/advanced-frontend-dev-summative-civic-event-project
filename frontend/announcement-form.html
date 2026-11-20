@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="assets/favicon.png?v=2">
+<title>Announcement form - Civic Events</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/layout.js"></script>
+<script src="js/media-utils.js"></script>
+<!-- ROLE GUARD: admin only (server enforces too) -->
+<script>requireAdmin();</script>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header id="site-header" class="h-16"></header>
+<main id="main-content" class="mx-auto w-full max-w-6xl px-4 py-8 sm:py-10">
+  <a href="announcements.html" class="text-sm text-brand-700 underline">&larr; All announcements</a>
+  <h1 id="page-h" class="text-3xl font-extrabold tracking-tight my-3">New announcement</h1>
+  <div id="state"></div>
+  <form id="form" novalidate class="space-y-4 rounded-md bg-white border border-gray-200 p-5">
+    <div>
+      <label for="title" class="block text-sm font-medium mb-1">Title *</label>
+      <input id="title" required maxlength="150" class="w-full rounded border border-gray-300 px-3 py-2 text-sm">
+      <p class="text-sm text-red-700" data-err="title"></p>
+    </div>
+    <div>
+      <label for="audio" class="block text-sm font-medium mb-1">Audio (MP3, WAV, OGG or M4A, max 8 MB) <span id="audio-req">*</span></label>
+      <input id="audio" type="file" accept=".mp3,.wav,.ogg,.m4a,audio/*" class="block w-full text-sm">
+      <p class="text-sm text-red-700" data-err="audio"></p>
+      <audio id="preview" controls class="hidden mt-3 w-full"></audio>
+    </div>
+    <div class="flex items-center gap-2">
+      <input id="published" type="checkbox" checked class="h-4 w-4">
+      <label for="published" class="text-sm font-medium">Published</label>
+    </div>
+    <div id="prog-wrap" class="hidden">
+      <progress id="prog" max="100" value="0" class="w-full" aria-label="Upload progress"></progress>
+      <p id="prog-t" class="text-xs text-slate-600" aria-live="polite"></p>
+    </div>
+    <p role="alert" class="text-sm text-red-700" data-err="form"></p>
+    <div class="flex gap-2">
+      <button type="submit" id="save" class="btn-primary">Save announcement</button>
+      <a href="announcements.html" class="btn-secondary">Cancel</a>
+    </div>
+  </form>
+</main>
+<footer id="site-footer"></footer>
+<script>
+$(function () {
+  var id = new URLSearchParams(location.search).get("id"), file = null, $f = $("#form");
+  var TYPES = ["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/wave", "audio/ogg", "audio/mp4", "audio/x-m4a", "audio/m4a"];
+  var setErr = function (k, m) { $f.find('[data-err="' + k + '"]').text(m || ""); };
+
+  function load() {
+    $("#page-h").text("Edit announcement"); $("#audio-req").text("(optional: leave empty to keep current)");
+    $f.addClass("hidden"); $("#state").html(UI.skeleton(1));
+    Api.get("/announcements/" + encodeURIComponent(id)).done(function (res) {
+      var a = res.data;
+      $("#state").empty(); $f.removeClass("hidden");
+      $("#title").val(a.title); $("#published").prop("checked", a.published !== false);
+      if (a.audio_url) $("#preview").attr("src", Media.url(a.audio_url)).removeClass("hidden");
+    }).fail(function (err) { UI.errorState($("#state"), err.message, load); });
+  }
+  if (id) load();
+
+  // Type and size are checked BEFORE any upload starts.
+  $("#audio").on("change", function () {
+    setErr("audio"); file = this.files[0] || null;
+    if (!file) return;
+    var e = Media.checkFile(file, TYPES, 8, "MP3, WAV, OGG or M4A audio");
+    if (e) { setErr("audio", e); file = null; this.value = ""; return; }
+    $("#preview").attr("src", URL.createObjectURL(file)).removeClass("hidden");
+  });
+
+  $f.on("submit", function (e) {
+    e.preventDefault(); $f.find("[data-err]").text("");
+    var ok = true;
+    if (!$("#title").val().trim()) { setErr("title", "This field is required."); ok = false; }
+    if (!id && !file) { setErr("audio", "Please choose an audio file."); ok = false; }
+    if (!ok) return $f.find("[data-err]:not(:empty)").first().prev().trigger("focus");
+
+    var fd = new FormData();
+    fd.append("title", $("#title").val().trim());
+    fd.append("published", $("#published").is(":checked"));
+    if (file) fd.append("audio", file);
+
+    var $b = $("#save"); UI.loading($b, true, "Saving...");
+    $("#prog-wrap").toggleClass("hidden", !file);
+    var opts = { onProgress: function (p) { $("#prog").val(p); $("#prog-t").text("Uploading " + p + "%"); } };
+    (id ? Api.put("/announcements/" + encodeURIComponent(id), fd, opts) : Api.post("/announcements", fd, opts)).done(function () {
+      UI.toast("Announcement saved.", "success");
+      setTimeout(function () { location.href = "announcements.html"; }, 700);
+    }).fail(function (err) {
+      UI.loading($b, false); $("#prog-wrap").addClass("hidden");
+      (err.errors || []).forEach(function (x) { setErr(x.field, x.message); });
+      setErr("form", err.errors.length ? "Please fix the highlighted fields." : err.message);
+    });
+  });
+});
+</script>
+</body>
+</html>

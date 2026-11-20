@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="assets/favicon.png?v=2">
+<title>Announcements - Civic Events</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/layout.js"></script>
+<script src="js/media-utils.js"></script>
+<script>requireAuth();</script>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header id="site-header" class="h-16"></header>
+<main id="main-content" class="mx-auto w-full max-w-6xl px-4 py-8 sm:py-10 space-y-5">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-3xl font-extrabold tracking-tight">Announcements</h1>
+    <!-- ROLE GUARD: UI only: admins only; server enforces too -->
+    <a id="new-btn" href="announcement-form.html" class="btn-primary hidden">New announcement</a>
+  </div>
+  <div id="list"></div>
+</main>
+<footer id="site-footer"></footer>
+<script>
+$(function () {
+  var all = [], current = null; // current: playing {audio, $btn, title}
+  if (isAdmin()) $("#new-btn").removeClass("hidden");
+
+  function setBtn($b, playing, title) {
+    $b.text(playing ? "Pause" : "Play").attr({ "aria-label": (playing ? "Pause " : "Play ") + title, "aria-pressed": playing });
+  }
+
+  function card(a) {
+    var $c = $('<li class="rounded-md bg-white border border-gray-200 p-4 space-y-3"></li>');
+    var $h = $('<h2 class="font-semibold text-lg"></h2>').append($('<a class="underline"></a>').attr("href", "announcement.html?id=" + encodeURIComponent(a.id)).text(a.title));
+    if (a.published === false) $h.append(' <span class="text-xs font-medium rounded bg-[#FDF1DC] text-gold-700 px-2 py-0.5">Draft</span>');
+    var $dur = $("<span>Duration: --:--</span>");
+    $c.append($h, $('<p class="text-sm text-slate-600"></p>').append($dur, " &middot; ", document.createTextNode(Media.fmtDate(a.created_at))));
+
+    var $play = $('<button type="button" class="btn-primary"></button>'); setBtn($play, false, a.title);
+    var audio = new Audio(); audio.preload = "metadata"; audio.src = Media.url(a.audio_url);
+    audio.addEventListener("loadedmetadata", function () { $dur.text("Duration: " + Media.fmtTime(audio.duration)); });
+    audio.addEventListener("error", function () { $dur.text("Audio unavailable"); $play.prop("disabled", true); });
+    audio.addEventListener("ended", function () { setBtn($play, false, a.title); });
+    $play.on("click", function () {
+      if (audio.paused) {
+        if (current && current.audio !== audio) { current.audio.pause(); setBtn(current.$btn, false, current.title); }
+        current = { audio: audio, $btn: $play, title: a.title };
+        audio.play().then(function () { setBtn($play, true, a.title); }).catch(function () { UI.toast("Couldn't play this audio.", "error"); });
+      } else { audio.pause(); setBtn($play, false, a.title); }
+    });
+    var $row = $('<div class="flex flex-wrap items-center gap-2"></div>').append($play);
+    // ROLE GUARD: UI only: publish/edit/delete rendered for admins only.
+    $row.append(Media.adminActions({
+      base: "/announcements", editHref: "announcement-form.html", noun: "Announcement", item: a,
+      onChange: render,
+      onDelete: function (x) { audio.pause(); all = all.filter(function (y) { return y.id !== x.id; }); render(); }
+    }));
+    return $c.append($row);
+  }
+
+  function render() {
+    var $l = $("#list").empty();
+    if (!all.length) return $l.html(UI.emptyState("No announcements yet", "Check back soon."));
+    var $u = $('<ul class="space-y-3"></ul>').appendTo($l);
+    all.forEach(function (a) { $u.append(card(a)); });
+  }
+
+  function init() {
+    $("#list").html(UI.skeleton(4));
+    Api.get("/announcements").done(function (res) {
+      all = (res.data || []).filter(Media.visible).sort(function (a, b) { return new Date(b.created_at) - new Date(a.created_at); });
+      render();
+    }).fail(function (err) { UI.errorState($("#list"), err.message, init); });
+  }
+  init();
+});
+</script>
+</body>
+</html>
