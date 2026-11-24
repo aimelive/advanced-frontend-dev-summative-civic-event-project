@@ -1,6 +1,9 @@
 # Node modules
 node_modules/
 
+# Uploaded media (event images, announcement audio, promo videos)
+uploads/
+
 # Logs
 logs/
 *.log

@@ -43,7 +43,7 @@ Script order on every page: Tailwind, jQuery, `config.js`, `auth.js`, `api.js`, 
 Sign-up accepts a role, so create the first admin with:
 ```
 curl -X POST http://localhost:4000/api/auth/signup -H "Content-Type: application/json" \
-  -d '{"full_name":"Admin","email":"admin@example.com","password":"secret123","role":"admin"}'
+  -d '{"full_name":"Admin","email":"admin@example.com","password":"Secret@123","role":"admin"}'
 ```
 (Note: the public sign-up form on `signup.html` does not send a role.)
 
